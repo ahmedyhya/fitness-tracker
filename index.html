@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#0d0d0d"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="FitTracker"/>
+<meta name="description" content="Personal PPL fitness tracker with Egyptian diet plan, supplement tracking, and commitment ranking"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<title>Ahmed Fitness Tracker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+::-webkit-scrollbar{display:none;}
+html,body{height:100%;background:#0d0d0d;}
+body{-webkit-tap-highlight-color:transparent;}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+</style>
+</head>
+<body>
+<div id="root" style="background:#0d0d0d;min-height:100vh;min-height:100dvh;"></div>
+<script>
+// ── localStorage helpers (replaces window.storage) ────────
+const LS={
+  get(key){try{const v=localStorage.getItem(key);return v?{value:v}:null;}catch{return null;}},
+  set(key,value){try{localStorage.setItem(key,value);return true;}catch{return false;}},
+  list(prefix){
+    const keys=[];
+    try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(prefix))keys.push(k);}}catch{}
+    return{keys};
+  }
+};
+</script>
+<script type="module">
+import{useState,useEffect}from"https://esm.sh/react@18";
+import{createRoot}from"https://esm.sh/react-dom@18/client";
+import{createElement as h}from"https://esm.sh/react@18";
+
+const BG="#0d0d0d",S1="#161616",S2="#1e1e1e",BD="#282828",T1="#f0f0f0",T2="#999",T3="#444";
+const PLAN_START="2027-07-05";
+
+const PPL=[
+  {label:"Push",type:"push",color:"#60a5fa",dim:"#0d1e35"},
+  {label:"Pull",type:"pull",color:"#4ade80",dim:"#0a1f12"},
+  {label:"Legs",type:"legs",color:"#fb923c",dim:"#1e0e00"},
+  {label:"Rest",type:"rest",color:"#c084fc",dim:"#1a0a2e"},
+  {label:"Push",type:"push",color:"#60a5fa",dim:"#0d1e35"},
+  {label:"Pull",type:"pull",color:"#4ade80",dim:"#0a1f12"},
+  {label:"Rest",type:"rest",color:"#c084fc",dim:"#1a0a2e"},
+];
+
+const EX={
+  push:{
+    1:["BB bench press — 4×10–12","DB incline press — 3×12","DB shoulder press (seated) — 3×12","Band lateral raises — 3×15","Tricep kickbacks — 3×12","Close-grip bench press — 3×10"],
+    2:["BB bench press — 4×8–10 + drop set on last","DB incline press — 4×10–12","DB Arnold press — 3×12","Lateral + front raise superset — 3×15","Overhead tricep extension — 3×12","Close-grip bench + push-up finisher — 3×10"],
+    3:["BB bench press — 5×5 (heavy, progressive)","DB incline press — 4×8","Military press (barbell) — 4×8","Band lateral raise — 4×15","Skull crushers — 4×10","Band-assisted dips — 3×12"],
+  },
+  pull:{
+    1:["BB bent-over row — 4×10–12","DB single-arm row — 3×12 each side","Band pull-apart — 3×20","DB hammer curl — 3×12","BB underhand curl — 3×12","Rear delt fly (bent-over) — 3×15"],
+    2:["BB bent-over row — 4×8–10 + drop set","DB single-arm row — 4×12 each","Band face pull — 3×20","Hammer + regular curl superset — 3×10 each","BB curl 21s — 3 sets","Rear delt fly — 4×15"],
+    3:["BB bent-over row — 5×5 (heavy)","DB single-arm row — 4×10 each","Band pull-apart — 4×20","Zottman curl — 4×10","BB underhand curl — 4×8","Rear delt fly — 4×15"],
+  },
+  legs:{
+    1:["BB squat — 4×10–12","Romanian deadlift (DBs) — 3×12","DB walking lunge — 3×12 each leg","Band glute bridge — 3×20","Standing calf raise — 3×20","Plank hold — 3×40 sec"],
+    2:["BB squat — 4×8–10 + drop set on last","Romanian deadlift — 4×10","DB reverse lunge — 3×12 each","Band hip thrust — 3×15","Single-leg calf raise — 3×15 each","Plank + side plank — 3×30 sec each"],
+    3:["BB squat — 5×5 (heavy, progressive)","Romanian deadlift — 4×10","BB walking lunge — 4×10 each leg","Band hip thrust — 4×20","Single-leg calf raise — 4×15 each","Ab circuit (plank, crunches, leg raises) — 3 rounds"],
+  },
+};
+
+const REST_ACT=[
+  {id:"walk",label:"Brisk walk 20–30 min",desc:"Boosts fat oxidation without stressing muscles"},
+  {id:"stretch",label:"Full body stretch 15 min",desc:"Hamstrings, chest, shoulders, hip flexors — 30 sec holds"},
+  {id:"foam",label:"Foam roll / self massage",desc:"Quads, lats, calves — release muscle tension"},
+  {id:"band",label:"Band pull-aparts 3×20",desc:"5 min max — shoulder health even on rest days"},
+];
+
+const HABITS=[
+  {id:"fasting",label:"16h fasting window",desc:"No calories before your eating window opens"},
+  {id:"meal1",label:"Meal 1 — break fast",desc:"Ful + labneh + lentil bread + eggs + salata baladi"},
+  {id:"snack",label:"Pre/post workout snack",desc:"Protein shake + 2-3 dates or banana"},
+  {id:"meal2",label:"Meal 2 — dinner",desc:"Grilled protein + brown rice or lentils + large salad"},
+  {id:"water",label:"Water 3–4 liters",desc:"Distributed throughout the day"},
+];
+
+const SUPPLS=[
+  {id:"creatine",label:"Creatine",dose:"5g daily — any time",color:"#60a5fa"},
+  {id:"protein",label:"Protein shake",dose:"1 scoop post-workout",color:"#4ade80"},
+  {id:"lcarnitine",label:"L-Carnitine",dose:"500mg–1g before workout",color:"#fb923c"},
+  {id:"chromium",label:"Chromium",dose:"200mcg with largest meal",color:"#c084fc"},
+];
+
+const DIET=[
+  {title:"Meal 1 — break fast",time:"12:00–1:00 pm",kcal:"~450 kcal",
+   items:[
+     ["Ful medames (150g)","Classic Egyptian — protein + fiber, low GI, ideal break-fast food"],
+     ["Lentil bread (2 slices)","عيش العدس — replaces aish baladi, higher fiber, lower GI"],
+     ["2–3 boiled or scrambled eggs","Main protein source — 12–18g protein"],
+     ["Labneh (50g low-fat)","Protein + probiotics — drizzle of olive oil"],
+     ["Salata baladi (unlimited)","Tomato, cucumber, parsley, lemon, 1 tsp olive oil — eat first"],
+     ["Watermelon (1 cup)","Eat last — lower GI impact when eaten after protein + fiber"],
+   ]},
+  {title:"Snack — pre/post workout",time:"3:00–4:00 pm",kcal:"~280 kcal",
+   items:[
+     ["Protein shake (1 scoop)","20–25g protein — mix with water not full-fat milk"],
+     ["2–3 dates (تمر)","Fast carbs for energy — ideal 30 min pre-workout"],
+     ["Small handful almonds","Optional — healthy fat, extends satiety"],
+   ]},
+  {title:"Meal 2 — main dinner",time:"7:00–8:00 pm",kcal:"~600 kcal",
+   items:[
+     ["Grilled chicken / kofta / fish (150–200g)","Grilled or air-fried — never deep-fried"],
+     ["Brown rice (1 cup) OR brown lentils","بديل الأرز الأبيض — lower GI, more fiber, keeps you full longer"],
+     ["Molokhia or steamed veg","Without butter or ghee — broccoli, zucchini, spinach work great"],
+     ["Large salata baladi","Tomato, cucumber, parsley, lemon — unlimited, eat plenty"],
+     ["1 tbsp olive oil","Used in cooking — helps absorb fat-soluble vitamins"],
+   ]},
+];
+
+const SWAPS=[
+  ["Aish baladi / white pita","Lentil bread (عيش العدس) or whole grain oat wraps"],
+  ["White rice","Brown rice / freekeh / bulgur / brown lentils"],
+  ["Koshary (with pasta)","Modified koshary — lentils + brown rice only, no pasta"],
+  ["Fried ta'meya / falafel","Air-fried or baked version (same flavour)"],
+  ["Fruit juices & soft drinks","Water, black coffee, unsweetened mint tea"],
+  ["Om Ali / kunafa","2–3 dates + low-fat plain yogurt"],
+  ["Vegetable oil / margarine","Olive oil only — 1 tbsp max per meal"],
+  ["White pasta","Lentil pasta or skip — get carbs from brown rice instead"],
+];
+
+const SUPPL_DATA=[
+  {name:"Creatine monohydrate",dose:"5g daily",timing:"Any time — consistency is what matters, not timing",color:"#60a5fa",dim:"#0d1e35",why:"Increases phosphocreatine in muscles, boosting strength and power output. Also preserves muscle mass during a caloric deficit. The initial 1–2 kg is intramuscular water — not fat. One of the most evidence-backed supplements available. Safe long-term."},
+  {name:"Protein powder (whey or plant)",dose:"1 scoop (20–25g protein)",timing:"Post-workout or whenever you need to hit your daily protein target",color:"#4ade80",dim:"#0a1f12",why:"The single most important nutrient during fat loss. Without enough protein, your body loses muscle alongside fat. Aim for 1.6g per kg of bodyweight per day. Powder is just a convenient vehicle — the protein is what matters."},
+  {name:"L-Carnitine",dose:"500mg–1g",timing:"30 min before workout — especially effective before fasted training",color:"#fb923c",dim:"#1e0e00",why:"Helps transport fatty acids into mitochondria to be burned as fuel. Most effective when combined with exercise and during fasted or low-carb periods. Pairs naturally with your 16:8 fasting window. Also supports recovery between sessions."},
+  {name:"Chromium picolinate",dose:"200–400 mcg",timing:"With your largest meal of the day (dinner)",color:"#c084fc",dim:"#1a0a2e",why:"Enhances insulin sensitivity and helps the body use carbohydrates more efficiently. Reduces post-meal blood sugar spikes. May help reduce sugar cravings during a caloric deficit. Strongly compatible with your low-GI Egyptian diet approach."},
+];
+
+// SVG illustrations
+function IllusPush({color,size=80}){
+  return h("svg",{viewBox:"0 0 100 70",width:size,xmlns:"http://www.w3.org/2000/svg"},
+    h("circle",{cx:50,cy:12,r:7,fill:color,opacity:.9}),
+    h("rect",{x:8,y:45,width:84,height:7,rx:3.5,fill:color,opacity:.2}),
+    h("rect",{x:2,y:37,width:14,height:8,rx:3,fill:color,opacity:.35}),
+    h("rect",{x:84,y:37,width:14,height:8,rx:3,fill:color,opacity:.35}),
+    h("path",{d:"M32 45 Q41 30 50 27 Q59 30 68 45",stroke:color,strokeWidth:2.5,fill:"none",strokeLinecap:"round"}),
+    h("line",{x1:32,y1:45,x2:28,y2:58,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("line",{x1:68,y1:45,x2:72,y2:58,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("line",{x1:50,y1:27,x2:50,y2:19,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+  );
+}
+function IllusPull({color,size=80}){
+  return h("svg",{viewBox:"0 0 100 70",width:size,xmlns:"http://www.w3.org/2000/svg"},
+    h("rect",{x:22,y:4,width:56,height:7,rx:3.5,fill:color,opacity:.35}),
+    h("circle",{cx:50,cy:42,r:7,fill:color,opacity:.9}),
+    h("line",{x1:38,y1:11,x2:34,y2:35,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("line",{x1:62,y1:11,x2:66,y2:35,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("line",{x1:34,y1:35,x2:50,y2:35,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("line",{x1:66,y1:35,x2:50,y2:35,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("line",{x1:44,y1:49,x2:39,y2:63,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("line",{x1:56,y1:49,x2:61,y2:63,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("rect",{x:26,y:25,width:10,height:16,rx:5,fill:color,opacity:.25}),
+    h("rect",{x:64,y:25,width:10,height:16,rx:5,fill:color,opacity:.25}),
+  );
+}
+function IllusLegs({color,size=80}){
+  return h("svg",{viewBox:"0 0 100 70",width:size,xmlns:"http://www.w3.org/2000/svg"},
+    h("rect",{x:18,y:5,width:64,height:7,rx:3.5,fill:color,opacity:.35}),
+    h("circle",{cx:50,cy:24,r:7,fill:color,opacity:.9}),
+    h("line",{x1:50,y1:17,x2:50,y2:12,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+    h("path",{d:"M43 31 L36 50 L32 64",stroke:color,strokeWidth:3,fill:"none",strokeLinecap:"round",strokeLinejoin:"round"}),
+    h("path",{d:"M57 31 L64 50 L68 64",stroke:color,strokeWidth:3,fill:"none",strokeLinecap:"round",strokeLinejoin:"round"}),
+    h("line",{x1:43,y1:31,x2:57,y2:31,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),
+  );
+}
+function IllusRest({color,size=80}){
+  return h("svg",{viewBox:"0 0 100 70",width:size,xmlns:"http://www.w3.org/2000/svg"},
+    h("path",{d:"M50 10 C34 10 22 22 22 38 C22 54 34 66 50 66 C66 66 78 54 78 38 C78 22 66 10 50 10",fill:color,opacity:.1}),
+    h("path",{d:"M54 18 C42 20 34 31 36 43 C38 55 50 61 62 56 C50 64 34 57 29 44 C24 31 32 18 45 16 C48 15 51 15 54 16 Z",fill:color,opacity:.65}),
+    h("circle",{cx:68,cy:16,r:3,fill:color,opacity:.55}),
+    h("circle",{cx:76,cy:24,r:2,fill:color,opacity:.35}),
+    h("circle",{cx:74,cy:8,r:1.5,fill:color,opacity:.25}),
+  );
+}
+const ILLUS_MAP={push:IllusPush,pull:IllusPull,legs:IllusLegs,rest:IllusRest};
+
+// Helpers
+const fmt=d=>d.toISOString().split("T")[0];
+const todayStr=()=>fmt(new Date());
+function dayIdx(ds){const s=new Date(PLAN_START+"T12:00:00"),c=new Date(ds+"T12:00:00");return(((Math.floor((c-s)/864e5))%7)+7)%7;}
+function weekNum(ds){const s=new Date(PLAN_START+"T12:00:00"),c=new Date(ds+"T12:00:00");return Math.floor(Math.max(0,Math.floor((c-s)/864e5))/7)+1;}
+function getPhase(wk){return wk<=4?1:wk<=8?2:3;}
+function last7(){return Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return fmt(d);});}
+function calDays(y,m){const days=[];for(let d=new Date(y,m,1);d.getMonth()===m;d.setDate(d.getDate()+1))days.push(fmt(new Date(d)));return days;}
+function getAllChecks(di,ph){
+  const dp=PPL[di];
+  if(dp.type==="rest")return[...HABITS,...SUPPLS.map(s=>({id:"supp_"+s.id})),...REST_ACT];
+  const exArr=(EX[dp.type]?.[ph]||[]).map((_,i)=>({id:"ex_"+i}));
+  return[...HABITS,...SUPPLS.map(s=>({id:"supp_"+s.id})),...exArr];
+}
+
+// ── Main App ───────────────────────────────────────────────
+function App(){
+  const today=todayStr();
+  const[tab,setTab]=useState(()=>{
+    const p=new URLSearchParams(location.search).get("tab");
+    return["today","month","diet","plan","suppl"].includes(p)?p:"today";
+  });
+  const[sel,setSel]=useState(today);
+  const[records,setRecords]=useState({});
+  const[loading,setLoading]=useState(true);
+  const[calY,setCalY]=useState(new Date().getFullYear());
+  const[calM,setCalM]=useState(new Date().getMonth());
+
+  // Load from localStorage (synchronous)
+  useEffect(()=>{
+    const loaded={};
+    try{
+      const{keys}=LS.list("fit2:");
+      (keys||[]).forEach(k=>{
+        const r=LS.get(k);
+        if(r)try{loaded[k.replace("fit2:","")]=JSON.parse(r.value);}catch{}
+      });
+    }catch{}
+    setRecords(loaded);
+    setLoading(false);
+  },[]);
+
+  const getRec=ds=>records[ds]||{};
+
+  const toggle=(ds,field)=>{
+    const curr=getRec(ds);
+    const upd={...curr,[field]:!curr[field]};
+    setRecords(p=>({...p,[ds]:upd}));
+    LS.set(`fit2:${ds}`,JSON.stringify(upd));
+  };
+
+  const completion=ds=>{
+    const di=dayIdx(ds),ph=getPhase(weekNum(ds));
+    const all=getAllChecks(di,ph);
+    const r=getRec(ds);
+    const done=all.filter(c=>r[c.id]).length;
+    return{done,total:all.length,pct:all.length>0?Math.round((done/all.length)*100):0};
+  };
+
+  const monthStats=(y,m)=>{
+    const days=calDays(y,m).filter(d=>d<=today);
+    let ttl=0,perfect=0,active=0;
+    days.forEach(d=>{const{pct,done}=completion(d);ttl+=pct;if(pct===100)perfect++;if(done>0)active++;});
+    const avg=days.length?Math.round(ttl/days.length):0;
+    const grade=avg>=90?"A+":avg>=80?"A":avg>=70?"B":avg>=60?"C":"D";
+    return{avg,perfect,active,total:days.length,grade};
+  };
+
+  if(loading)return h("div",{style:{background:BG,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:T3,fontSize:14}},"Loading…");
+
+  const di=dayIdx(sel);
+  const dp=PPL[di];
+  const wk=weekNum(sel);
+  const ph=getPhase(wk);
+  const phName=["Foundation","Hypertrophy","Strength"][ph-1];
+  const exList=dp.type!=="rest"?(EX[dp.type]?.[ph]||[]):[];
+  const r=getRec(sel);
+  const{done,total,pct}=completion(sel);
+  const wd=last7();
+  const MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const ms=monthStats(calY,calM);
+  const gradeColor={"A+":"#4ade80","A":"#86efac","B":"#60a5fa","C":"#fb923c","D":"#f87171"};
+  const cDays=calDays(calY,calM);
+  const firstDow=new Date(calY,calM,1).getDay();
+  const IllusComp=ILLUS_MAP[dp.type]||IllusRest;
+
+  const card={background:S1,border:`0.5px solid ${BD}`,borderRadius:12,overflow:"hidden",marginBottom:10};
+  const row=(isDone,last)=>({display:"flex",alignItems:"center",gap:10,padding:"12px 14px",cursor:"pointer",background:isDone?"#091509":"transparent",transition:"background .12s",borderBottom:last?"none":`0.5px solid ${BD}`});
+  const chk=(isDone)=>({width:22,height:22,borderRadius:6,border:isDone?"none":`1.5px solid ${BD}`,background:isDone?"#16a34a":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"#fff",fontSize:13});
+  const caps={fontSize:11,fontWeight:600,color:T3,textTransform:"uppercase",letterSpacing:".07em",marginBottom:8,marginTop:"1.25rem"};
+  const tbtn=(a)=>({flex:1,padding:"9px 2px",border:"none",background:"none",cursor:"pointer",fontSize:11,color:a?T1:T3,fontWeight:a?600:400,borderBottom:a?`2px solid ${dp.color}`:"2px solid transparent"});
+
+  const HabitRow=({h:hb,last})=>{
+    const isDone=!!r[hb.id];
+    return h("div",{onClick:()=>toggle(sel,hb.id),style:row(isDone,last)},
+      h("div",{style:chk(isDone)},isDone&&"✓"),
+      h("div",{style:{flex:1}},
+        h("p",{style:{fontSize:14,color:isDone?"#4ade80":T1,textDecoration:isDone?"line-through":"none",opacity:isDone?.55:1}},hb.label),
+        h("p",{style:{fontSize:11,color:T3,marginTop:2}},hb.desc),
+      )
+    );
+  };
+
+  const SupplRow=({s,last})=>{
+    const key="supp_"+s.id;const isDone=!!r[key];
+    return h("div",{onClick:()=>toggle(sel,key),style:row(isDone,last)},
+      h("div",{style:chk(isDone)},isDone&&"✓"),
+      h("div",{style:{flex:1}},
+        h("p",{style:{fontSize:14,color:isDone?"#4ade80":T1,textDecoration:isDone?"line-through":"none",opacity:isDone?.55:1}},s.label),
+        h("p",{style:{fontSize:11,color:T3,marginTop:2}},s.dose),
+      ),
+      h("span",{style:{fontSize:11,color:s.color,background:s.color+"20",padding:"2px 8px",borderRadius:99,flexShrink:0}},"daily")
+    );
+  };
+
+  const ExRow=({ex,i,last})=>{
+    const key="ex_"+i;const isDone=!!r[key];
+    return h("div",{onClick:()=>toggle(sel,key),style:row(isDone,last)},
+      h("div",{style:chk(isDone)},isDone&&"✓"),
+      h("p",{style:{fontSize:14,color:isDone?"#4ade80":T1,textDecoration:isDone?"line-through":"none",opacity:isDone?.55:1,lineHeight:1.4}},ex)
+    );
+  };
+
+  const RestRow=({a,last})=>{
+    const isDone=!!r[a.id];
+    return h("div",{onClick:()=>toggle(sel,a.id),style:row(isDone,last)},
+      h("div",{style:chk(isDone)},isDone&&"✓"),
+      h("div",{style:{flex:1}},
+        h("p",{style:{fontSize:14,color:isDone?"#4ade80":T1,textDecoration:isDone?"line-through":"none",opacity:isDone?.55:1}},a.label),
+        h("p",{style:{fontSize:11,color:T3,marginTop:2}},a.desc),
+      )
+    );
+  };
+
+  return h("div",{style:{background:BG,minHeight:"100vh",maxWidth:480,margin:"0 auto",paddingBottom:80,fontFamily:"system-ui,-apple-system,sans-serif",color:T1}},
+
+    h("div",{style:{padding:"1rem 1rem .75rem",borderBottom:`0.5px solid ${BD}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",background:BG,position:"sticky",top:0,zIndex:20}},
+      h("div",{},
+        h("p",{style:{fontSize:11,color:T3,marginBottom:2}},`Ahmed · Phase ${ph} — ${phName} · Week ${Math.max(1,wk)}`),
+        h("h1",{style:{fontSize:19,fontWeight:500,color:T1}},"Fitness tracker"),
+      ),
+      h("div",{style:{textAlign:"right"}},
+        h("p",{style:{fontSize:11,color:T3}},new Date(today+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})),
+        h("p",{style:{fontSize:12,color:dp.color,marginTop:2}},dp.label+" day"),
+      )
+    ),
+
+    h("div",{style:{display:"flex",borderBottom:`0.5px solid ${BD}`,background:S1,position:"sticky",top:"52px",zIndex:10}},
+      [["today","Today"],["month","Month"],["diet","Diet"],["plan","Plan"],["suppl","Suppl"]].map(([id,lbl])=>
+        h("button",{key:id,onClick:()=>setTab(id),style:tbtn(tab===id)},lbl)
+      )
+    ),
+
+    // ── TODAY ──────────────────────────────────────────────
+    tab==="today"&&h("div",{style:{padding:"1rem"}},
+      h("div",{style:{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:"1rem",WebkitOverflowScrolling:"touch"}},
+        wd.map(ds=>{
+          const ddi=dayIdx(ds);const ddp=PPL[ddi];
+          const hasAny=Object.values(getRec(ds)).some(Boolean);
+          const isTd=ds===today;const isSel=ds===sel;
+          return h("button",{key:ds,onClick:()=>setSel(ds),style:{flex:"0 0 auto",width:48,padding:"7px 0",borderRadius:10,background:isSel?S2:S1,border:isSel?`1.5px solid ${ddp.color}`:`0.5px solid ${BD}`,cursor:"pointer",textAlign:"center"}},
+            h("p",{style:{fontSize:10,color:T3,marginBottom:2}},new Date(ds+"T12:00:00").toLocaleDateString("en-US",{weekday:"short"})),
+            h("p",{style:{fontSize:15,fontWeight:isSel?600:400,color:isTd?ddp.color:T1,marginBottom:4}},new Date(ds+"T12:00:00").getDate()),
+            h("div",{style:{width:6,height:6,borderRadius:"50%",margin:"0 auto",background:hasAny?ddp.color:BD}})
+          );
+        })
+      ),
+
+      h("div",{style:{background:dp.dim,borderRadius:16,padding:"1rem",marginBottom:"1rem",border:`0.5px solid ${dp.color}25`,display:"flex",gap:12,alignItems:"center"}},
+        h("div",{style:{flexShrink:0}},h(IllusComp,{color:dp.color,size:76})),
+        h("div",{style:{flex:1}},
+          h("p",{style:{fontSize:11,color:dp.color,marginBottom:3,opacity:.75}},`Day ${di+1} · Week ${Math.max(1,wk)} · Phase ${ph}`),
+          h("p",{style:{fontSize:20,fontWeight:500,color:dp.color}},dp.label+" day"),
+          h("p",{style:{fontSize:12,color:dp.color,opacity:.65,marginBottom:8}},`${phName} phase`),
+          h("div",{style:{height:4,background:"#ffffff0a",borderRadius:99,overflow:"hidden"}},
+            h("div",{style:{height:"100%",width:`${pct}%`,background:dp.color,borderRadius:99,transition:"width .3s"}})
+          ),
+          h("p",{style:{fontSize:11,color:dp.color,marginTop:5,opacity:.7}},`${done}/${total} done — ${pct}%`)
+        )
+      ),
+
+      h("p",{style:caps},"Daily habits"),
+      h("div",{style:card}, HABITS.map((hb,i)=>h(HabitRow,{key:hb.id,h:hb,last:i===HABITS.length-1}))),
+
+      h("p",{style:caps},"Supplements"),
+      h("div",{style:card}, SUPPLS.map((s,i)=>h(SupplRow,{key:s.id,s,last:i===SUPPLS.length-1}))),
+
+      dp.type!=="rest"
+        ? h("div",{},
+            h("p",{style:caps},`Exercises — ${dp.label} (Phase ${ph}: ${phName})`),
+            h("div",{style:card}, exList.map((ex,i)=>h(ExRow,{key:i,ex,i,last:i===exList.length-1})))
+          )
+        : h("div",{},
+            h("p",{style:caps},"Active rest day"),
+            h("div",{style:card}, REST_ACT.map((a,i)=>h(RestRow,{key:a.id,a,last:i===REST_ACT.length-1}))),
+            h("div",{style:{background:dp.dim,borderRadius:12,padding:"1rem",textAlign:"center",border:`0.5px solid ${dp.color}20`,marginTop:10}},
+              h("div",{style:{width:60,margin:"0 auto 8px"}},h(IllusRest,{color:dp.color,size:60})),
+              h("p",{style:{fontSize:15,fontWeight:500,color:dp.color,marginBottom:4}},"Recovery is part of the program"),
+              h("p",{style:{fontSize:13,color:dp.color,opacity:.65,lineHeight:1.5}},"Muscles grow on rest days. Sleep well, move lightly, and hit your protein target.")
+            )
+          )
+    ),
+
+    // ── MONTH / RANKING ────────────────────────────────────
+    tab==="month"&&h("div",{style:{padding:"1rem"}},
+      (()=>{
+        const planStart=new Date(PLAN_START+"T12:00:00");
+        const todayD=new Date(today+"T12:00:00");
+        const totalPlanDays=today>=PLAN_START?Math.floor((todayD-planStart)/864e5)+1:0;
+        let overallTotal=0,overallDone=0,streak=0,bestStreak=0,tempStreak=0,workoutDays=0,perfectDays=0,activeDays=0;
+        if(totalPlanDays>0){
+          const allPlanDays=Array.from({length:totalPlanDays},(_,i)=>{const d=new Date(planStart);d.setDate(d.getDate()+i);return fmt(d);});
+          allPlanDays.forEach(ds=>{
+            const di2=dayIdx(ds),ph2=getPhase(weekNum(ds));
+            const all2=getAllChecks(di2,ph2);
+            const r2=getRec(ds);
+            const done2=all2.filter(c=>r2[c.id]).length;
+            overallTotal+=all2.length;overallDone+=done2;
+            if(done2>0){activeDays++;tempStreak++;}else{if(tempStreak>bestStreak)bestStreak=tempStreak;tempStreak=0;}
+            if(done2===all2.length&&all2.length>0)perfectDays++;
+            if(r2["ex_0"]||r2["walk"])workoutDays++;
+          });
+          if(tempStreak>bestStreak)bestStreak=tempStreak;
+          streak=tempStreak;
+        }
+        const overallPct=overallTotal>0?Math.round((overallDone/overallTotal)*100):0;
+        const commitRate=totalPlanDays>0?Math.round((activeDays/totalPlanDays)*100):0;
+        const overallGrade=overallPct>=90?"S":overallPct>=80?"A+":overallPct>=70?"A":overallPct>=60?"B":overallPct>=40?"C":"D";
+        const gradeC={"S":"#facc15","A+":"#4ade80","A":"#86efac","B":"#60a5fa","C":"#fb923c","D":"#f87171"};
+        const medal=overallPct>=90?"🏆":overallPct>=80?"🥇":overallPct>=70?"🥈":overallPct>=60?"🥉":"💪";
+        const gradeMsg=overallPct>=90?"Elite — top 5% commitment":overallPct>=80?"Excellent — you're building a habit":overallPct>=70?"Good — push a bit harder this week":overallPct>=60?"Solid base — stay consistent":overallPct>=40?"Keep going — every check-in counts":"Plan starts Jul 5, 2027 — get ready";
+        return h("div",{},
+          h("div",{style:{background:"linear-gradient(135deg,#0d1e35 0%,#0a1f12 100%)",borderRadius:16,padding:"1.25rem",marginBottom:"1rem",border:"0.5px solid #ffffff10",textAlign:"center"}},
+            h("p",{style:{fontSize:12,color:T3,marginBottom:6,letterSpacing:".05em",textTransform:"uppercase"}},"Overall commitment score"),
+            h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:8}},
+              h("p",{style:{fontSize:52,lineHeight:1}},medal),
+              h("div",{},
+                h("p",{style:{fontSize:56,fontWeight:700,color:gradeC[overallGrade]||T1,lineHeight:1}},overallGrade),
+                h("p",{style:{fontSize:12,color:T3,marginTop:2}},`${overallPct}% of all tasks`)
+              )
+            ),
+            h("p",{style:{fontSize:13,color:T2,marginBottom:"1rem"}},gradeMsg),
+            h("div",{style:{height:6,background:"#ffffff0a",borderRadius:99,overflow:"hidden",marginBottom:"1rem"}},
+              h("div",{style:{height:"100%",width:`${overallPct}%`,background:"linear-gradient(90deg,#4ade80,#60a5fa)",borderRadius:99,transition:"width .5s"}})
+            ),
+            h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}},
+              [{lbl:"Plan days",val:totalPlanDays||"—",color:T2},{lbl:"Active",val:activeDays||"—",color:"#60a5fa"},{lbl:"Perfect",val:perfectDays||"—",color:"#4ade80"},{lbl:"🔥 Streak",val:streak>0?streak+"d":"0d",color:"#fb923c"}]
+              .map(({lbl,val,color})=>h("div",{key:lbl,style:{background:"#ffffff05",borderRadius:8,padding:"8px 4px",textAlign:"center"}},
+                h("p",{style:{fontSize:18,fontWeight:600,color}},val),
+                h("p",{style:{fontSize:9,color:T3,marginTop:2,textTransform:"uppercase",letterSpacing:".04em"}},lbl)
+              ))
+            )
+          ),
+          h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:"1rem"}},
+            [{lbl:"Best streak",val:bestStreak>0?bestStreak+" days":"—",sub:"consecutive active days",color:"#fb923c",dim:"#1e0e00"},{lbl:"Commitment rate",val:commitRate>0?commitRate+"%":"—",sub:"days with any activity",color:"#60a5fa",dim:"#0d1e35"},{lbl:"Workout sessions",val:workoutDays>0?workoutDays:"—",sub:"training days logged",color:"#4ade80",dim:"#0a1f12"},{lbl:"Perfect days",val:perfectDays>0?perfectDays:"—",sub:"100% daily checklist",color:"#facc15",dim:"#1a1200"}]
+            .map(({lbl,val,sub,color,dim})=>h("div",{key:lbl,style:{background:dim,borderRadius:12,padding:"10px 12px",border:`0.5px solid ${color}20`}},
+              h("p",{style:{fontSize:10,color:T3,marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}},lbl),
+              h("p",{style:{fontSize:24,fontWeight:600,color}},val),
+              h("p",{style:{fontSize:10,color:T3,marginTop:2}},sub)
+            ))
+          ),
+          h("div",{style:{background:S1,borderRadius:12,padding:"12px 14px",marginBottom:"1rem",border:`0.5px solid ${BD}`}},
+            h("p",{style:{fontSize:11,color:T3,marginBottom:10,textTransform:"uppercase",letterSpacing:".05em",fontWeight:600}},"Ranking scale"),
+            [["S","≥ 90%","#facc15","Elite commitment — top tier"],["A+","≥ 80%","#4ade80","Excellent — strong habit"],["A","≥ 70%","#86efac","Good — consistent effort"],["B","≥ 60%","#60a5fa","Solid — room to grow"],["C","≥ 40%","#fb923c","Needs focus — push more"],["D","< 40%","#f87171","Restart — every day matters"]]
+            .map(([g,range,color,msg],i,arr)=>h("div",{key:g,style:{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:i<arr.length-1?`0.5px solid ${BD}`:"none"}},
+              h("div",{style:{width:28,height:28,borderRadius:8,background:color+"20",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},h("p",{style:{fontSize:14,fontWeight:700,color}},g)),
+              h("div",{style:{flex:1}},h("p",{style:{fontSize:13,color:T1}},msg),h("p",{style:{fontSize:10,color:T3,marginTop:1}},range+" of tasks completed")),
+              overallGrade===g&&h("span",{style:{fontSize:10,color,background:color+"20",padding:"2px 8px",borderRadius:99,flexShrink:0}},"← you")
+            ))
+          )
+        );
+      })(),
+
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}},
+        h("button",{onClick:()=>{if(calM===0){setCalM(11);setCalY(y=>y-1);}else setCalM(m=>m-1);},style:{background:S1,border:`0.5px solid ${BD}`,color:T1,borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:16}},"‹"),
+        h("p",{style:{fontSize:15,fontWeight:500,color:T1}},`${MN[calM]} ${calY}`),
+        h("button",{onClick:()=>{if(calM===11){setCalM(0);setCalY(y=>y+1);}else setCalM(m=>m+1);},style:{background:S1,border:`0.5px solid ${BD}`,color:T1,borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:16}},"›")
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:"1rem"}},
+        [{lbl:"Grade",val:ms.grade,color:gradeColor[ms.grade]||T1},{lbl:"Avg",val:ms.avg+"%",color:"#60a5fa"},{lbl:"Perfect",val:ms.perfect+"d",color:"#4ade80"},{lbl:"Active",val:ms.active+"d",color:"#fb923c"}]
+        .map(({lbl,val,color})=>h("div",{key:lbl,style:{background:S1,borderRadius:10,padding:"8px 6px",textAlign:"center"}},h("p",{style:{fontSize:10,color:T3,marginBottom:3,textTransform:"uppercase",letterSpacing:".04em"}},lbl),h("p",{style:{fontSize:20,fontWeight:600,color}},val)))
+      ),
+      h("div",{style:{background:S1,borderRadius:14,padding:"1rem",border:`0.5px solid ${BD}`}},
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:8}},
+          ["Su","Mo","Tu","We","Th","Fr","Sa"].map(d=>h("p",{key:d,style:{fontSize:10,color:T3,textAlign:"center",fontWeight:600}},d))
+        ),
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}},
+          [...Array(firstDow).fill(null).map((_,i)=>h("div",{key:"e"+i})),
+           ...cDays.map(ds=>{
+             const{pct:p}=completion(ds);
+             const isFuture=ds>today,isTd=ds===today;
+             const hasAny=Object.values(getRec(ds)).some(Boolean);
+             const ddi=dayIdx(ds),ddp=PPL[ddi];
+             let bg2=S2;
+             if(!isFuture&&hasAny)bg2=p>=80?"#0a1f0a":p>=50?"#1e0e00":"#0d1e35";
+             return h("div",{key:ds,onClick:()=>{setSel(ds);setTab("today");},style:{aspectRatio:"1",borderRadius:8,background:bg2,border:isTd?`1.5px solid ${ddp.color}`:`0.5px solid ${BD}`,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}},
+               h("p",{style:{fontSize:12,color:isFuture?"#2a2a2a":T1,fontWeight:isTd?600:400}},new Date(ds+"T12:00:00").getDate()),
+               !isFuture&&hasAny&&h("p",{style:{fontSize:7,color:ddp.color,marginTop:1}},p+"%")
+             );
+           })]
+        ),
+        h("div",{style:{display:"flex",gap:10,marginTop:12,justifyContent:"center",flexWrap:"wrap"}},
+          [["#0a1f0a","80–100%"],["#1e0e00","50–79%"],["#0d1e35","1–49%"]].map(([bg2,lbl])=>
+            h("div",{key:lbl,style:{display:"flex",alignItems:"center",gap:4}},
+              h("div",{style:{width:10,height:10,borderRadius:3,background:bg2,border:`0.5px solid ${BD}`}}),
+              h("p",{style:{fontSize:10,color:T3}},lbl)
+            )
+          )
+        )
+      ),
+      ms.total>0&&h("div",{style:{background:"#091509",border:"0.5px solid #4ade8025",borderRadius:12,padding:"1rem",marginTop:10}},
+        h("p",{style:{fontSize:13,fontWeight:500,color:"#4ade80",marginBottom:4}},`${MN[calM]} summary`),
+        h("p",{style:{fontSize:13,color:T2,lineHeight:1.6}},
+          `${ms.perfect} perfect day${ms.perfect!==1?"s":""}, ${ms.active} active day${ms.active!==1?"s":""}. Average ${ms.avg}% — grade ${ms.grade}. `,
+          ms.avg>=80?"Great consistency — keep going.":ms.avg>=60?"Solid effort. Push for 80% next month.":"Every day counts. Small wins add up."
+        )
+      )
+    ),
+
+    // ── DIET ───────────────────────────────────────────────
+    tab==="diet"&&h("div",{style:{padding:"1rem"}},
+      h("p",{style:{fontSize:13,color:T2,marginBottom:"1rem",lineHeight:1.5}},"Egyptian & Arabic cuisine — no white flour · high protein · low GI · IF-compatible"),
+      DIET.map(meal=>
+        h("div",{key:meal.title,style:{...card,marginBottom:14}},
+          h("div",{style:{padding:"12px 14px",borderBottom:`0.5px solid ${BD}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:S2}},
+            h("div",{},h("p",{style:{fontSize:14,fontWeight:500,color:T1}},meal.title),h("p",{style:{fontSize:11,color:T3,marginTop:2}},meal.time)),
+            h("span",{style:{fontSize:12,color:"#fb923c",background:"#1e0e00",padding:"3px 8px",borderRadius:99,flexShrink:0}},meal.kcal)
+          ),
+          ...meal.items.map(([name,note],i)=>
+            h("div",{key:i,style:{display:"flex",gap:10,padding:"10px 14px",borderBottom:i<meal.items.length-1?`0.5px solid ${BD}`:"none",alignItems:"flex-start"}},
+              h("span",{style:{fontSize:13,color:"#4ade80",flexShrink:0,marginTop:1}},"✓"),
+              h("div",{},h("p",{style:{fontSize:14,color:T1}},name),h("p",{style:{fontSize:11,color:T3,marginTop:2}},note))
+            )
+          )
+        )
+      ),
+      h("p",{style:caps},"Avoid → Egyptian-friendly swap"),
+      h("div",{style:card},
+        SWAPS.map(([avoid,swap],i)=>
+          h("div",{key:i,style:{padding:"10px 14px",borderBottom:i<SWAPS.length-1?`0.5px solid ${BD}`:"none"}},
+            h("p",{style:{fontSize:12,color:"#f87171",textDecoration:"line-through",marginBottom:3}},"✗  "+avoid),
+            h("p",{style:{fontSize:13,color:"#4ade80"}},"→  "+swap)
+          )
+        )
+      ),
+      h("div",{style:{background:"#0a1525",border:"0.5px solid #60a5fa25",borderRadius:12,padding:"1rem",marginTop:4}},
+        h("p",{style:{fontSize:13,fontWeight:500,color:"#60a5fa",marginBottom:6}},"Egyptian diet tip"),
+        h("p",{style:{fontSize:13,color:T2,lineHeight:1.6}},"Our cuisine is naturally IF-friendly. Ful, lentils, labneh, and eggs are high-protein and low-GI. The main swaps needed are white bread → lentil bread and white rice → brown rice or freekeh. Everything else — molokhia, grilled kofta, salata baladi — is already perfect for fat loss and muscle gain.")
+      )
+    ),
+
+    // ── PLAN ───────────────────────────────────────────────
+    tab==="plan"&&h("div",{style:{padding:"1rem"}},
+      h("p",{style:caps},"12-week program phases"),
+      [[1,"Foundation","Weeks 1–4","#60a5fa","#0d1e35","3–4 sets · 10–12 reps · Learn the movements, nail your form, build the habit. Progressive overload starts week 2."],
+       [2,"Hypertrophy","Weeks 5–8","#fb923c","#1e0e00","4 sets · 8–12 reps + drop sets and supersets. Higher volume for max muscle hypertrophy. Intensity increases significantly."],
+       [3,"Strength","Weeks 9–12","#c084fc","#1a0a2e","5×5 on compound lifts + 3×10–12 accessories. Build real strength as the base for the next cycle. Weights go up, reps go down."],
+      ].map(([p2,name,wks,color,dim,desc])=>
+        h("div",{key:p2,style:{background:dim,border:`0.5px solid ${color}25`,borderRadius:12,padding:"12px 14px",marginBottom:10}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}},
+            h("div",{},h("p",{style:{fontSize:13,fontWeight:500,color}},`Phase ${p2} — ${name}`),h("p",{style:{fontSize:11,color:color,opacity:.6,marginTop:2}},wks)),
+            p2===ph&&h("span",{style:{fontSize:11,color,background:color+"20",padding:"2px 8px",borderRadius:99,flexShrink:0,marginLeft:8}},"← current")
+          ),
+          h("p",{style:{fontSize:13,color:T2,lineHeight:1.5}},desc)
+        )
+      ),
+      h("p",{style:{...caps,marginTop:"1.5rem"}},"PPL cycle — current exercises (phase "+ph+": "+phName+")"),
+      PPL.map((dp2,i)=>{
+        const exArr=dp2.type!=="rest"?(EX[dp2.type]?.[ph]||[]):[];
+        const Ic=ILLUS_MAP[dp2.type]||IllusRest;
+        return h("div",{key:i,style:{...card,marginBottom:10}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:exArr.length?`0.5px solid ${BD}`:"none",background:dp2.dim}},
+            h("div",{style:{flexShrink:0}},h(Ic,{color:dp2.color,size:32})),
+            h("p",{style:{fontSize:14,fontWeight:500,color:dp2.color}},`Day ${i+1} — ${dp2.label}`),
+            h("span",{style:{marginLeft:"auto",fontSize:11,color:dp2.color,background:dp2.color+"20",padding:"2px 8px",borderRadius:99}},dp2.type)
+          ),
+          exArr.length>0
+            ?exArr.map((ex,ei)=>h("p",{key:ei,style:{fontSize:13,color:T2,padding:"7px 14px",borderBottom:ei<exArr.length-1?`0.5px solid ${BD}`:"none"}},ex))
+            :h("p",{style:{fontSize:13,color:T3,padding:"10px 14px"}},"Light walk · Stretching · Foam roll · Recovery")
+        );
+      }),
+      h("p",{style:{...caps,marginTop:"1.5rem"}},"Active rest day — full guide"),
+      h("div",{style:card},
+        [["Brisk walk 20–30 min","Boosts circulation and fat oxidation without straining muscles. Morning fasted walk burns extra fat."],["Full body stretch 15 min","Hamstrings, chest, shoulders, hip flexors — 30 sec holds. Reduces DOMS for next session."],["Foam roll / self massage","Quads, lats, calves. Releases fascia tension and speeds up muscle recovery significantly."],["Band pull-aparts 3×20","5 minutes max. Keeps shoulder health and scapular stability even on rest days."],["Swimming (optional)","Excellent active recovery — full body, zero joint impact. Great if you have access to a compound pool."],["Sleep 7–8 hours","The most underrated recovery tool. Growth hormone peaks during deep sleep — this is when muscle is actually rebuilt."]]
+        .map(([title,desc],i,arr)=>h("div",{key:i,style:{padding:"12px 14px",borderBottom:i<arr.length-1?`0.5px solid ${BD}`:"none"}},h("p",{style:{fontSize:14,color:T1,marginBottom:3}},title),h("p",{style:{fontSize:12,color:T3,lineHeight:1.5}},desc)))
+      )
+    ),
+
+    // ── SUPPLEMENTS ────────────────────────────────────────
+    tab==="suppl"&&h("div",{style:{padding:"1rem"}},
+      SUPPL_DATA.map(s=>
+        h("div",{key:s.name,style:{background:S1,border:`0.5px solid ${BD}`,borderRadius:14,padding:"1rem",marginBottom:12}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:10}},
+            h("div",{style:{width:44,height:44,borderRadius:12,background:s.dim,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
+              h("div",{style:{width:22,height:22,borderRadius:"50%",background:s.color,opacity:.8}})
+            ),
+            h("div",{},h("p",{style:{fontSize:15,fontWeight:500,color:T1}},s.name),h("p",{style:{fontSize:12,color:s.color}},s.dose))
+          ),
+          h("div",{style:{display:"flex",gap:8,marginBottom:8,alignItems:"flex-start"}},h("p",{style:{fontSize:12,color:T3,flexShrink:0}},"⏱"),h("p",{style:{fontSize:13,color:T2}},s.timing)),
+          h("div",{style:{background:s.dim,borderRadius:10,padding:"10px 12px",border:`0.5px solid ${s.color}15`}},h("p",{style:{fontSize:13,color:T2,lineHeight:1.6}},s.why))
+        )
+      ),
+      h("div",{style:{background:"#1a0e00",border:"0.5px solid #fb923c25",borderRadius:12,padding:"1rem"}},
+        h("p",{style:{fontSize:13,color:T2,lineHeight:1.6}},"⚠  Supplements support your plan but don't replace the fundamentals: protein target, caloric deficit, consistent training, and quality sleep. Check with your doctor before starting chromium or L-carnitine if you have any health conditions.")
+      )
+    )
+  );
+}
+
+createRoot(document.getElementById("root")).render(h(App));
+</script>
+<script>
+// Register service worker for offline & PWA install
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
