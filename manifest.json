@@ -1,42 +1,680 @@
-{
-  "name": "Ahmed Fitness Tracker",
-  "short_name": "FitTracker",
-  "description": "Personal PPL fitness tracker with Egyptian diet plan, supplement tracking, and commitment ranking",
-  "start_url": "/",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#0d0d0d",
-  "theme_color": "#0d0d0d",
-  "categories": ["health", "fitness"],
-  "lang": "en",
-  "icons": [
-    { "src": "icons/icon-72.png",  "sizes": "72x72",   "type": "image/png" },
-    { "src": "icons/icon-96.png",  "sizes": "96x96",   "type": "image/png" },
-    { "src": "icons/icon-128.png", "sizes": "128x128", "type": "image/png" },
-    { "src": "icons/icon-144.png", "sizes": "144x144", "type": "image/png" },
-    { "src": "icons/icon-152.png", "sizes": "152x152", "type": "image/png" },
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon-384.png", "sizes": "384x384", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ],
-  "screenshots": [],
-  "shortcuts": [
-    {
-      "name": "Today's Checklist",
-      "short_name": "Today",
-      "description": "Open today's workout and habit checklist",
-      "url": "/?tab=today",
-      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "My Ranking",
-      "short_name": "Ranking",
-      "description": "View your commitment score and ranking",
-      "url": "/?tab=month",
-      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
-    }
-  ]
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#0d0d0d"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="FitTracker"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<title>Ahmed Fitness Tracker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+::-webkit-scrollbar{display:none;}
+html,body{height:100%;background:#0d0d0d;}
+body{-webkit-tap-highlight-color:transparent;}
+input[type="date"]{color-scheme:dark;}
+</style>
+</head>
+<body>
+<div id="root" style="background:#0d0d0d;min-height:100vh;min-height:100dvh;"></div>
+<script>
+const LS={
+  get(k){try{const v=localStorage.getItem(k);return v?{value:v}:null;}catch{return null;}},
+  set(k,v){try{localStorage.setItem(k,v);}catch{}},
+  list(prefix){const keys=[];try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(prefix))keys.push(k);}}catch{}return{keys};}
+};
+</script>
+<script type="module">
+import{useState,useEffect,useCallback}from"https://esm.sh/react@18";
+import{createRoot}from"https://esm.sh/react-dom@18/client";
+import{createElement as h}from"https://esm.sh/react@18";
+
+const BG="#0d0d0d",S1="#161616",S2="#1e1e1e",BD="#282828",T1="#f0f0f0",T2="#999",T3="#444";
+const WATER_GOAL=12;
+
+const PPL=[
+  {label:"Push",type:"push",color:"#60a5fa",dim:"#0d1e35"},
+  {label:"Pull",type:"pull",color:"#4ade80",dim:"#0a1f12"},
+  {label:"Legs",type:"legs",color:"#fb923c",dim:"#1e0e00"},
+  {label:"Rest",type:"rest",color:"#c084fc",dim:"#1a0a2e"},
+  {label:"Push",type:"push",color:"#60a5fa",dim:"#0d1e35"},
+  {label:"Pull",type:"pull",color:"#4ade80",dim:"#0a1f12"},
+  {label:"Rest",type:"rest",color:"#c084fc",dim:"#1a0a2e"},
+];
+
+const EX={
+  push:{
+    1:["BB bench press — 4×10–12","DB incline press — 3×12","DB shoulder press — 3×12","Band lateral raises — 3×15","Tricep kickbacks — 3×12","Close-grip bench press — 3×10"],
+    2:["BB bench press — 4×8–10 + drop set","DB incline press — 4×10–12","DB Arnold press — 3×12","Lateral+front raise superset — 3×15","Overhead tricep ext — 3×12","Close-grip + push-up finisher — 3×10"],
+    3:["BB bench press — 5×5 heavy","DB incline press — 4×8","Military press (BB) — 4×8","Band lateral raise — 4×15","Skull crushers — 4×10","Band-assisted dips — 3×12"],
+  },
+  pull:{
+    1:["BB bent-over row — 4×10–12","DB single-arm row — 3×12 each","Band pull-apart — 3×20","DB hammer curl — 3×12","BB underhand curl — 3×12","Rear delt fly — 3×15"],
+    2:["BB bent-over row — 4×8–10 + drop set","DB single-arm row — 4×12 each","Band face pull — 3×20","Hammer+curl superset — 3×10 each","BB curl 21s — 3 sets","Rear delt fly — 4×15"],
+    3:["BB bent-over row — 5×5 heavy","DB single-arm row — 4×10 each","Band pull-apart — 4×20","Zottman curl — 4×10","BB underhand curl — 4×8","Rear delt fly — 4×15"],
+  },
+  legs:{
+    1:["BB squat — 4×10–12","Romanian deadlift (DBs) — 3×12","DB walking lunge — 3×12 each","Band glute bridge — 3×20","Standing calf raise — 3×20","Plank — 3×40 sec"],
+    2:["BB squat — 4×8–10 + drop set","Romanian deadlift — 4×10","DB reverse lunge — 3×12 each","Band hip thrust — 3×15","Single-leg calf raise — 3×15 each","Plank + side plank — 3×30 sec"],
+    3:["BB squat — 5×5 heavy","Romanian deadlift — 4×10","BB walking lunge — 4×10 each","Band hip thrust — 4×20","Single-leg calf raise — 4×15 each","Ab circuit — 3 rounds"],
+  },
+};
+
+const REST_ACT=[
+  {id:"walk",label:"Brisk walk 20–30 min",desc:"يعزز حرق الدهون بدون ضغط على العضلات"},
+  {id:"stretch",label:"Full body stretch 15 min",desc:"هامسترينج، صدر، كتف، hip flexors — 30 ثانية لكل عضلة"},
+  {id:"foam",label:"Foam roll / تدليك ذاتي",desc:"أرباع، ظهر عريض، ربلة — يحرر توترات اللفافة"},
+  {id:"band",label:"Band pull-aparts 3×20",desc:"5 دقائق — صحة الكتف في أيام الراحة"},
+];
+
+const HABITS=[
+  {id:"fasting",label:"16h fasting window",desc:"لا سعرات قبل نافذة الأكل"},
+  {id:"meal1",label:"Meal 1 — break fast (12pm)",desc:"فول + لبنة + عيش العدس + بيض + سلطة بلدي"},
+  {id:"snack",label:"Pre/post workout snack",desc:"Protein shake + 2–3 تمرات أو موزة"},
+  {id:"meal2",label:"Meal 2 — dinner (7–8pm)",desc:"بروتين مشوي + أرز بني + سلطة كبيرة"},
+];
+
+const SUPPLS=[
+  {id:"creatine",  label:"Creatine",      dose:"5g — any time daily",        color:"#60a5fa"},
+  {id:"protein",   label:"Protein shake", dose:"1 scoop post-workout",        color:"#4ade80"},
+  {id:"lcarnitine",label:"L-Carnitine",   dose:"500mg–1g before workout",     color:"#fb923c"},
+  {id:"chromium",  label:"Chromium",      dose:"200mcg with largest meal",    color:"#c084fc"},
+  {id:"multivit",  label:"Multivitamins", dose:"1 tablet daily — with meal",  color:"#f472b6"},
+  {id:"vitd",      label:"Vitamin D",     dose:"1 capsule every 2 days",      color:"#fbbf24",every2days:true},
+];
+
+const SUPPL_DATA=[
+  {name:"Creatine monohydrate",dose:"5g daily",timing:"Any time — consistency is what matters",color:"#60a5fa",dim:"#0d1e35",why:"Increases phosphocreatine stores, boosting strength and power. Preserves muscle during a deficit. Initial 1–2 kg gain is intramuscular water. Most evidence-backed supplement available."},
+  {name:"Protein powder",dose:"1 scoop (20–25g)",timing:"Post-workout or to hit daily protein target",color:"#4ade80",dim:"#0a1f12",why:"Most critical nutrient during fat loss. Without enough protein the body loses muscle alongside fat. Target 1.6g per kg bodyweight daily."},
+  {name:"L-Carnitine",dose:"500mg–1g",timing:"30 min before workout — especially fasted morning training",color:"#fb923c",dim:"#1e0e00",why:"Transports fatty acids into mitochondria to be burned as fuel. Most effective with exercise during fasted periods. Pairs perfectly with 16:8 IF."},
+  {name:"Chromium picolinate",dose:"200–400 mcg",timing:"With your largest meal (dinner)",color:"#c084fc",dim:"#1a0a2e",why:"Enhances insulin sensitivity. Helps the body process carbohydrates more efficiently. Reduces post-meal blood sugar spikes. Compatible with low-GI Egyptian diet."},
+  {name:"Multivitamins",dose:"1 tablet",timing:"Once daily — with Meal 1 or Meal 2 (not fasting)",color:"#f472b6",dim:"#2d0a1a",why:"Covers micronutrient gaps during a caloric deficit. Important because eating less means fewer vitamins overall. Supports energy metabolism and muscle recovery."},
+  {name:"Vitamin D3",dose:"1 capsule every 2 days",timing:"With a meal containing fat (eggs, olive oil) for better absorption",color:"#fbbf24",dim:"#1a1200",why:"Most people in KSA are deficient despite sun exposure. Supports muscle function, testosterone levels, immune health, and fat metabolism. Every-2-days dosing is standard for maintenance."},
+];
+
+const DIET=[
+  {title:"وجبة 1 — كسر الصيام",titleEn:"Meal 1 — Break fast",time:"12:00–1:00 pm",totalKcal:455,macros:{p:30,c:44,f:14},
+   items:[
+     {name:"فول مدمس (150g)",kcal:120,p:8,c:18,f:3,note:"بروتين + ألياف — مؤشر جلايسيمي منخفض",alt:"بديل: عدس مسلوق أو حمص"},
+     {name:"عيش العدس (2 شريحة)",kcal:95,p:5,c:16,f:2,note:"بدل العيش الأبيض — ألياف أعلى",alt:"بديل: خبز الشوفان أو whole grain wrap"},
+     {name:"2–3 بيض مسلوق",kcal:140,p:12,c:1,f:10,note:"مصدر البروتين الرئيسي",alt:"بديل: 3 بياض + 1 كامل لتقليل الدهون"},
+     {name:"لبنة قليلة الدسم (50g)",kcal:55,p:4,c:3,f:3,note:"بروتين + بروبيوتيك",alt:"بديل: جبن قريش أو Greek yogurt 0%"},
+     {name:"سلطة بلدي (بدون حد)",kcal:35,p:1,c:7,f:1,note:"اكلها الأول — الألياف بتبطئ السكر",alt:"أي خضار طازج: خيار، طماطم، فلفل"},
+     {name:"بطيخ (1 كوب max)",kcal:46,p:1,c:11,f:0,note:"اكله آخر حاجة بعد البروتين",alt:"بديل: شمام، فراولة، أو تفاحة"},
+   ]},
+  {title:"سناك — قبل/بعد التمرين",titleEn:"Snack — Pre/post workout",time:"3:00–4:00 pm",totalKcal:285,macros:{p:25,c:28,f:7},
+   items:[
+     {name:"Protein shake (1 scoop)",kcal:120,p:24,c:4,f:2,note:"20–25g protein بالميه",alt:"بديل: 200g جبن قريش + قليل عسل"},
+     {name:"2–3 تمرة",kcal:80,p:0,c:20,f:0,note:"كربو سريع — 30 دقيقة قبل التمرين",alt:"بديل: موزة صغيرة"},
+     {name:"حفنة لوز (15g)",kcal:87,p:3,c:3,f:7,note:"اختياري — دهون صحية",alt:"بديل: جوز 3 حبات"},
+   ]},
+  {title:"وجبة 2 — العشاء",titleEn:"Meal 2 — Main dinner",time:"7:00–8:00 pm",totalKcal:605,macros:{p:44,c:56,f:15},
+   items:[
+     {name:"صدر فراخ مشوي (180g)",kcal:220,p:38,c:0,f:5,note:"مشوي أو air-fried — مش مقلي",alt:"بديل: سمك مشوي، كفتة بلدي، أو لحمة خالية الدهن"},
+     {name:"أرز بني (3/4 كوب مطبوخ)",kcal:165,p:3,c:35,f:1,note:"مؤشر جلايسيمي أقل من الأبيض",alt:"بديل: فريكة، برغل، كينوا، أو عدس بني"},
+     {name:"ملوخية أو خضار بخار",kcal:60,p:3,c:10,f:1,note:"بدون زبدة أو سمن",alt:"بديل: بروكلي، زوكيني، سبانخ"},
+     {name:"سلطة كبيرة (بدون حد)",kcal:40,p:1,c:8,f:1,note:"كلها براحتك",alt:"أي سلطة بدون صوص عالي السعرات"},
+     {name:"زيت زيتون (1 ملعقة كبيرة)",kcal:120,p:0,c:0,f:14,note:"في الطبخ أو السلطة",alt:"بديل: قليل tahini مخفف بالليمون"},
+   ]},
+];
+
+const SWAPS=[
+  ["عيش بلدي / بيتا أبيض","عيش العدس أو whole grain wrap"],
+  ["أرز أبيض","أرز بني / فريكة / برغل / عدس بني"],
+  ["كشري (مع معكرونة)","كشري معدّل — عدس + أرز بني بس"],
+  ["طعمية / فلافل مقلية","نسخة air-fried أو بالفرن"],
+  ["عصائر ومشروبات غازية","ماء، قهوة سادة، شاي بالنعناع بدون سكر"],
+  ["أم علي / كنافة","2–3 تمرات + زبادي قليل الدسم"],
+  ["زيت نباتي / مارجرين","زيت زيتون — 1 ملعقة max في الوجبة"],
+  ["معكرونة بيضاء","lentil pasta أو اعتمد على الأرز البني"],
+];
+
+// SVG illustrations
+function IllusPush({color,size=80}){return h("svg",{viewBox:"0 0 100 70",width:size},h("circle",{cx:50,cy:12,r:7,fill:color,opacity:.9}),h("rect",{x:8,y:45,width:84,height:7,rx:3.5,fill:color,opacity:.2}),h("rect",{x:2,y:37,width:14,height:8,rx:3,fill:color,opacity:.35}),h("rect",{x:84,y:37,width:14,height:8,rx:3,fill:color,opacity:.35}),h("path",{d:"M32 45 Q41 30 50 27 Q59 30 68 45",stroke:color,strokeWidth:2.5,fill:"none",strokeLinecap:"round"}),h("line",{x1:32,y1:45,x2:28,y2:58,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("line",{x1:68,y1:45,x2:72,y2:58,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("line",{x1:50,y1:27,x2:50,y2:19,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}));}
+function IllusPull({color,size=80}){return h("svg",{viewBox:"0 0 100 70",width:size},h("rect",{x:22,y:4,width:56,height:7,rx:3.5,fill:color,opacity:.35}),h("circle",{cx:50,cy:42,r:7,fill:color,opacity:.9}),h("line",{x1:38,y1:11,x2:34,y2:35,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("line",{x1:62,y1:11,x2:66,y2:35,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("line",{x1:34,y1:35,x2:50,y2:35,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("line",{x1:66,y1:35,x2:50,y2:35,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("line",{x1:44,y1:49,x2:39,y2:63,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("line",{x1:56,y1:49,x2:61,y2:63,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("rect",{x:26,y:25,width:10,height:16,rx:5,fill:color,opacity:.25}),h("rect",{x:64,y:25,width:10,height:16,rx:5,fill:color,opacity:.25}));}
+function IllusLegs({color,size=80}){return h("svg",{viewBox:"0 0 100 70",width:size},h("rect",{x:18,y:5,width:64,height:7,rx:3.5,fill:color,opacity:.35}),h("circle",{cx:50,cy:24,r:7,fill:color,opacity:.9}),h("line",{x1:50,y1:17,x2:50,y2:12,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}),h("path",{d:"M43 31 L36 50 L32 64",stroke:color,strokeWidth:3,fill:"none",strokeLinecap:"round",strokeLinejoin:"round"}),h("path",{d:"M57 31 L64 50 L68 64",stroke:color,strokeWidth:3,fill:"none",strokeLinecap:"round",strokeLinejoin:"round"}),h("line",{x1:43,y1:31,x2:57,y2:31,stroke:color,strokeWidth:2.5,strokeLinecap:"round"}));}
+function IllusRest({color,size=80}){return h("svg",{viewBox:"0 0 100 70",width:size},h("path",{d:"M50 10 C34 10 22 22 22 38 C22 54 34 66 50 66 C66 66 78 54 78 38 C78 22 66 10 50 10",fill:color,opacity:.1}),h("path",{d:"M54 18 C42 20 34 31 36 43 C38 55 50 61 62 56 C50 64 34 57 29 44 C24 31 32 18 45 16 C48 15 51 15 54 16 Z",fill:color,opacity:.65}),h("circle",{cx:68,cy:16,r:3,fill:color,opacity:.55}),h("circle",{cx:76,cy:24,r:2,fill:color,opacity:.35}));}
+const ILLUS_MAP={push:IllusPush,pull:IllusPull,legs:IllusLegs,rest:IllusRest};
+
+// ── Helpers (LOCAL date — no UTC conversion) ──────────────
+const fmt=d=>{
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,"0");
+  const dy=String(d.getDate()).padStart(2,"0");
+  return y+"-"+m+"-"+dy;
+};
+const todayStr=()=>fmt(new Date());
+
+function dayIdx(planStart,ds){
+  const s=new Date(planStart+"T12:00:00"),c=new Date(ds+"T12:00:00");
+  return(((Math.floor((c-s)/864e5))%7)+7)%7;
 }
+function weekNum(planStart,ds){
+  const s=new Date(planStart+"T12:00:00"),c=new Date(ds+"T12:00:00");
+  return Math.floor(Math.max(0,Math.floor((c-s)/864e5))/7)+1;
+}
+function getPhase(wk){return wk<=4?1:wk<=8?2:3;}
+function last7(){return Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return fmt(d);});}
+function calDays(y,m){const days=[];for(let d=new Date(y,m,1);d.getMonth()===m;d.setDate(d.getDate()+1))days.push(fmt(new Date(d)));return days;}
+function isVitDDay(planStart,ds){
+  if(ds<planStart)return false;
+  const s=new Date(planStart+"T12:00:00"),c=new Date(ds+"T12:00:00");
+  return Math.floor((c-s)/864e5)%2===0;
+}
+function getActiveSuppls(planStart,ds){return SUPPLS.filter(s=>!s.every2days||isVitDDay(planStart,ds));}
+function getAllChecks(planStart,ds){
+  const di=dayIdx(planStart,ds),ph=getPhase(weekNum(planStart,ds));
+  const dp=PPL[di];
+  const sc=getActiveSuppls(planStart,ds).map(s=>({id:"supp_"+s.id}));
+  const waterChecks=Array.from({length:WATER_GOAL},(_,i)=>({id:"w"+i}));
+  if(dp.type==="rest")return[...HABITS,...sc,...REST_ACT,...waterChecks];
+  const exArr=(EX[dp.type]?.[ph]||[]).map((_,i)=>({id:"ex_"+i}));
+  return[...HABITS,...sc,...exArr,...waterChecks];
+}
+
+function fmtDisplay(ds){
+  const d=new Date(ds+"T12:00:00");
+  return d.toLocaleDateString("ar-EG",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+}
+function fmtDisplayEn(ds){
+  const d=new Date(ds+"T12:00:00");
+  return d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
+}
+
+// ── Onboarding screen ──────────────────────────────────────
+function Onboarding({onConfirm}){
+  const today=todayStr();
+  const[mode,setMode]=useState("confirm"); // "confirm" | "pick"
+  const[picked,setPicked]=useState(today);
+
+  const dayName=ds=>{
+    const days=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+    return days[new Date(ds+"T12:00:00").getDay()];
+  };
+  const pplDay0=PPL[0];
+
+  return h("div",{style:{background:BG,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"1.5rem",fontFamily:"system-ui,-apple-system,sans-serif",color:T1}},
+
+    // Logo / illustration
+    h("div",{style:{marginBottom:"1.5rem"}},h(IllusPush,{color:"#60a5fa",size:90})),
+
+    h("h1",{style:{fontSize:24,fontWeight:600,color:T1,marginBottom:8,textAlign:"center"}},"Ahmed Fitness Tracker"),
+    h("p",{style:{fontSize:14,color:T3,marginBottom:"2rem",textAlign:"center"}},"PPL · Egyptian diet · IF · Supplements"),
+
+    mode==="confirm"&&h("div",{style:{width:"100%",maxWidth:360}},
+      h("div",{style:{background:"linear-gradient(135deg,#0d1e35,#0a1f12)",borderRadius:16,padding:"1.25rem",marginBottom:"1rem",border:"0.5px solid #60a5fa30",textAlign:"center"}},
+        h("p",{style:{fontSize:12,color:T3,marginBottom:6,textTransform:"uppercase",letterSpacing:".06em"}},"اليوم هو"),
+        h("p",{style:{fontSize:22,fontWeight:600,color:"#60a5fa",marginBottom:4}},fmtDisplay(today)),
+        h("p",{style:{fontSize:13,color:T2,marginBottom:"1rem"}},fmtDisplayEn(today)),
+        h("div",{style:{background:"#60a5fa15",borderRadius:10,padding:"10px",display:"inline-flex",alignItems:"center",gap:8}},
+          h("div",{style:{width:10,height:10,borderRadius:"50%",background:pplDay0.color,flexShrink:0}}),
+          h("p",{style:{fontSize:13,color:pplDay0.color}},"Day 1 — Push (أول يوم في الخطة)")
+        )
+      ),
+
+      h("p",{style:{fontSize:14,color:T2,textAlign:"center",marginBottom:"1.25rem",lineHeight:1.6}},"عايز تبدأ الخطة النهارده؟\nكل الأيام والأسابيع هتتحسب من تاريخ البداية."),
+
+      h("button",{
+        onClick:()=>onConfirm(today),
+        style:{width:"100%",padding:"14px",borderRadius:12,border:"none",background:"#60a5fa",color:"#0d1e35",fontSize:16,fontWeight:600,cursor:"pointer",marginBottom:10}
+      },"✓ أيوه — ابدأ النهارده"),
+
+      h("button",{
+        onClick:()=>setMode("pick"),
+        style:{width:"100%",padding:"12px",borderRadius:12,border:`0.5px solid ${BD}`,background:S1,color:T2,fontSize:14,cursor:"pointer"}
+      },"اختار تاريخ تاني")
+    ),
+
+    mode==="pick"&&h("div",{style:{width:"100%",maxWidth:360}},
+      h("p",{style:{fontSize:15,fontWeight:500,color:T1,marginBottom:12,textAlign:"center"}},"اختار تاريخ بداية الخطة"),
+
+      h("input",{
+        type:"date",
+        value:picked,
+        max:today,
+        onChange:e=>setPicked(e.target.value),
+        style:{width:"100%",padding:"14px",borderRadius:12,border:`0.5px solid ${BD}`,background:S1,color:T1,fontSize:16,marginBottom:10,textAlign:"center"}
+      }),
+
+      picked&&h("div",{style:{background:S1,borderRadius:12,padding:"10px 14px",marginBottom:"1rem",textAlign:"center"}},
+        h("p",{style:{fontSize:13,color:T3,marginBottom:4}},"اليوم الأول في الخطة هيكون"),
+        h("p",{style:{fontSize:16,fontWeight:600,color:"#60a5fa"}},fmtDisplay(picked)),
+        h("div",{style:{display:"flex",alignItems:"center",gap:6,justifyContent:"center",marginTop:6}},
+          h("div",{style:{width:8,height:8,borderRadius:"50%",background:PPL[0].color}}),
+          h("p",{style:{fontSize:12,color:PPL[0].color}},"Day 1 — Push")
+        )
+      ),
+
+      h("button",{
+        onClick:()=>picked&&onConfirm(picked),
+        style:{width:"100%",padding:"14px",borderRadius:12,border:"none",background:picked?"#60a5fa":"#333",color:picked?"#0d1e35":T3,fontSize:16,fontWeight:600,cursor:picked?"pointer":"default",marginBottom:10}
+      },"✓ تأكيد"),
+
+      h("button",{
+        onClick:()=>setMode("confirm"),
+        style:{width:"100%",padding:"12px",borderRadius:12,border:`0.5px solid ${BD}`,background:"transparent",color:T3,fontSize:14,cursor:"pointer"}
+      },"← رجوع")
+    )
+  );
+}
+
+// ── Change start date modal ────────────────────────────────
+function ChangeDateModal({currentStart,onSave,onCancel}){
+  const today=todayStr();
+  const[picked,setPicked]=useState(currentStart);
+  return h("div",{style:{position:"fixed",inset:0,background:"#000000cc",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1.5rem"}},
+    h("div",{style:{background:S1,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:360,border:`0.5px solid ${BD}`}},
+      h("p",{style:{fontSize:16,fontWeight:500,color:T1,marginBottom:4}},"تغيير تاريخ بداية الخطة"),
+      h("p",{style:{fontSize:12,color:T3,marginBottom:"1.25rem"}},"تحذير: سيؤثر على حساب كل الأيام والأسابيع"),
+      h("input",{type:"date",value:picked,max:today,onChange:e=>setPicked(e.target.value),
+        style:{width:"100%",padding:"12px",borderRadius:10,border:`0.5px solid ${BD}`,background:S2,color:T1,fontSize:15,marginBottom:10}}),
+      picked&&h("div",{style:{background:"#0d1e35",borderRadius:10,padding:"10px",marginBottom:"1rem",textAlign:"center"}},
+        h("p",{style:{fontSize:13,color:"#60a5fa"}},fmtDisplay(picked)),
+        h("p",{style:{fontSize:11,color:T3,marginTop:3}},"Day 1 — Push")
+      ),
+      h("div",{style:{display:"flex",gap:8}},
+        h("button",{onClick:onCancel,style:{flex:1,padding:"12px",borderRadius:10,border:`0.5px solid ${BD}`,background:"transparent",color:T2,fontSize:14,cursor:"pointer"}},"إلغاء"),
+        h("button",{onClick:()=>picked&&onSave(picked),style:{flex:2,padding:"12px",borderRadius:10,border:"none",background:picked?"#60a5fa":"#333",color:picked?"#0d1e35":T3,fontSize:14,fontWeight:600,cursor:picked?"pointer":"default"}},"✓ حفظ")
+      )
+    )
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────
+function App(){
+  const today=todayStr();
+  const[planStart,setPlanStart]=useState(null); // null = not yet loaded
+  const[showChangeDateModal,setShowChangeDateModal]=useState(false);
+  const[tab,setTab]=useState("today");
+  const[sel,setSel]=useState(today);
+  const[records,setRecords]=useState({});
+  const[calY,setCalY]=useState(new Date().getFullYear());
+  const[calM,setCalM]=useState(new Date().getMonth());
+
+  // Load plan start + records
+  useEffect(()=>{
+    const saved=LS.get("fit3:plan_start");
+    if(saved)setPlanStart(saved.value);
+    else setPlanStart(""); // empty = show onboarding
+
+    const loaded={};
+    try{
+      const{keys}=LS.list("fit3:day:");
+      (keys||[]).forEach(k=>{
+        const r=LS.get(k);
+        if(r)try{loaded[k.replace("fit3:day:","")]=JSON.parse(r.value);}catch{}
+      });
+    }catch{}
+    setRecords(loaded);
+  },[]);
+
+  const confirmStart=(ds)=>{
+    LS.set("fit3:plan_start",ds);
+    setPlanStart(ds);
+  };
+
+  const changeStart=(ds)=>{
+    LS.set("fit3:plan_start",ds);
+    setPlanStart(ds);
+    setShowChangeDateModal(false);
+  };
+
+  const getRec=ds=>records[ds]||{};
+
+  const toggle=(ds,field)=>{
+    const curr=getRec(ds);
+    const upd={...curr,[field]:!curr[field]};
+    setRecords(p=>({...p,[ds]:upd}));
+    LS.set("fit3:day:"+ds,JSON.stringify(upd));
+  };
+
+  const setWaterCup=(ds,idx,val)=>{
+    const curr=getRec(ds);
+    const upd={...curr,["w"+idx]:val};
+    setRecords(p=>({...p,[ds]:upd}));
+    LS.set("fit3:day:"+ds,JSON.stringify(upd));
+  };
+
+  const completion=ds=>{
+    if(!planStart)return{done:0,total:0,pct:0};
+    const all=getAllChecks(planStart,ds);
+    const r=getRec(ds);
+    const done=all.filter(c=>r[c.id]).length;
+    return{done,total:all.length,pct:all.length>0?Math.round((done/all.length)*100):0};
+  };
+
+  const monthStats=(y,m)=>{
+    if(!planStart)return{avg:0,perfect:0,active:0,total:0,grade:"—"};
+    const days=calDays(y,m).filter(d=>d<=today&&d>=planStart);
+    let ttl=0,perfect=0,active=0;
+    days.forEach(d=>{const{pct,done}=completion(d);ttl+=pct;if(pct===100)perfect++;if(done>0)active++;});
+    const avg=days.length?Math.round(ttl/days.length):0;
+    const grade=avg>=90?"A+":avg>=80?"A":avg>=70?"B":avg>=60?"C":"D";
+    return{avg,perfect,active,total:days.length,grade};
+  };
+
+  // Loading state
+  if(planStart===null)return h("div",{style:{background:BG,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:T3,fontSize:14}},"جارٍ التحميل…");
+
+  // Onboarding
+  if(planStart==="")return h(Onboarding,{onConfirm:confirmStart});
+
+  const di=dayIdx(planStart,sel);
+  const dp=PPL[di];
+  const wk=weekNum(planStart,sel);
+  const ph=getPhase(wk);
+  const phName=["Foundation","Hypertrophy","Strength"][ph-1];
+  const exList=dp.type!=="rest"?(EX[dp.type]?.[ph]||[]):[];
+  const r=getRec(sel);
+  const{done,total,pct}=completion(sel);
+  const wd=last7();
+  const MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const ms=monthStats(calY,calM);
+  const gradeColor={"A+":"#4ade80","A":"#86efac","B":"#60a5fa","C":"#fb923c","D":"#f87171"};
+  const cDays=calDays(calY,calM);
+  const firstDow=new Date(calY,calM,1).getDay();
+  const IllusComp=ILLUS_MAP[dp.type]||IllusRest;
+  const vitDToday=isVitDDay(planStart,sel);
+  const waterCups=Array.from({length:WATER_GOAL},(_,i)=>!!r["w"+i]);
+  const cupsCount=waterCups.filter(Boolean).length;
+  const waterLiters=((cupsCount*300)/1000).toFixed(1);
+
+  const card={background:S1,border:`0.5px solid ${BD}`,borderRadius:12,overflow:"hidden",marginBottom:10};
+  const rowStyle=(isDone,last)=>({display:"flex",alignItems:"center",gap:10,padding:"12px 14px",cursor:"pointer",background:isDone?"#091509":"transparent",transition:"background .12s",borderBottom:last?"none":`0.5px solid ${BD}`});
+  const chkStyle=(isDone)=>({width:22,height:22,borderRadius:6,border:isDone?"none":`1.5px solid ${BD}`,background:isDone?"#16a34a":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"#fff",fontSize:13});
+  const caps={fontSize:11,fontWeight:600,color:T3,textTransform:"uppercase",letterSpacing:".07em",marginBottom:8,marginTop:"1.25rem"};
+  const tbtn=(a)=>({flex:1,padding:"9px 2px",border:"none",background:"none",cursor:"pointer",fontSize:11,color:a?T1:T3,fontWeight:a?600:400,borderBottom:a?`2px solid ${dp.color}`:"2px solid transparent"});
+
+  const HabitRow=({hb,last})=>{const isDone=!!r[hb.id];return h("div",{onClick:()=>toggle(sel,hb.id),style:rowStyle(isDone,last)},h("div",{style:chkStyle(isDone)},isDone&&"✓"),h("div",{style:{flex:1}},h("p",{style:{fontSize:14,color:isDone?"#4ade80":T1,textDecoration:isDone?"line-through":"none",opacity:isDone?.6:1}},hb.label),h("p",{style:{fontSize:11,color:T3,marginTop:2}},hb.desc)));};
+
+  const allSuplsForDisplay=SUPPLS.map(s=>{
+    const skip=s.every2days&&!vitDToday;
+    return{...s,skip};
+  });
+
+  const SupplRow=({s,last})=>{
+    const key="supp_"+s.id;const isDone=!!r[key];
+    if(s.skip)return h("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:last?"none":`0.5px solid ${BD}`,opacity:.3}},h("div",{style:chkStyle(false)}),h("div",{style:{flex:1}},h("p",{style:{fontSize:14,color:T3}},s.label),h("p",{style:{fontSize:11,color:T3,marginTop:2}},"اليوم التاني — skip today")),h("span",{style:{fontSize:10,color:"#555",background:"#222",padding:"2px 8px",borderRadius:99}},"every 2d"));
+    return h("div",{onClick:()=>toggle(sel,key),style:rowStyle(isDone,last)},h("div",{style:chkStyle(isDone)},isDone&&"✓"),h("div",{style:{flex:1}},h("p",{style:{fontSize:14,color:isDone?"#4ade80":T1,textDecoration:isDone?"line-through":"none",opacity:isDone?.6:1}},s.label),h("p",{style:{fontSize:11,color:T3,marginTop:2}},s.dose)),h("span",{style:{fontSize:10,color:s.color,background:s.color+"20",padding:"2px 8px",borderRadius:99,flexShrink:0}},s.every2days?"today ✓":"daily"));
+  };
+
+  const ExRow=({ex,i,last})=>{const key="ex_"+i;const isDone=!!r[key];return h("div",{onClick:()=>toggle(sel,key),style:rowStyle(isDone,last)},h("div",{style:chkStyle(isDone)},isDone&&"✓"),h("p",{style:{fontSize:14,color:isDone?"#4ade80":T1,textDecoration:isDone?"line-through":"none",opacity:isDone?.6:1,lineHeight:1.4}},ex));};
+  const RestRow=({a,last})=>{const isDone=!!r[a.id];return h("div",{onClick:()=>toggle(sel,a.id),style:rowStyle(isDone,last)},h("div",{style:chkStyle(isDone)},isDone&&"✓"),h("div",{style:{flex:1}},h("p",{style:{fontSize:14,color:isDone?"#4ade80":T1,textDecoration:isDone?"line-through":"none",opacity:isDone?.6:1}},a.label),h("p",{style:{fontSize:11,color:T3,marginTop:2}},a.desc)));};
+
+  const WaterWidget=()=>h("div",{style:{background:S1,border:`0.5px solid ${BD}`,borderRadius:12,padding:"12px 14px",marginBottom:10}},
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
+      h("div",{},h("p",{style:{fontSize:14,fontWeight:500,color:cupsCount>=WATER_GOAL?"#4ade80":T1}},"💧 المياه اليومية"),h("p",{style:{fontSize:11,color:T3,marginTop:2}},cupsCount+"/"+WATER_GOAL+" كوب — "+waterLiters+"L من 3.6L")),
+      h("p",{style:{fontSize:18,fontWeight:600,color:cupsCount>=WATER_GOAL?"#4ade80":"#60a5fa"}},Math.round((cupsCount/WATER_GOAL)*100)+"%")
+    ),
+    h("div",{style:{height:4,background:"#ffffff0a",borderRadius:99,overflow:"hidden",marginBottom:12}},h("div",{style:{height:"100%",width:Math.round((cupsCount/WATER_GOAL)*100)+"%",background:"linear-gradient(90deg,#60a5fa,#4ade80)",borderRadius:99,transition:"width .3s"}})),
+    h("div",{style:{display:"flex",gap:5,flexWrap:"wrap"}},waterCups.map((filled,i)=>h("button",{key:i,onClick:()=>setWaterCup(sel,i,!filled),style:{width:36,height:40,borderRadius:8,border:`0.5px solid ${filled?"#60a5fa":BD}`,background:filled?"#0d1e35":"transparent",cursor:"pointer",fontSize:18,transition:"all .15s"}},filled?"🥤":"⬜"))),
+    h("p",{style:{fontSize:10,color:T3,marginTop:8}},"كل كوب = 300ml · "+WATER_GOAL+" كوب = 3.6 لتر · اضغط للتسجيل")
+  );
+
+  return h("div",{style:{background:BG,minHeight:"100vh",maxWidth:480,margin:"0 auto",paddingBottom:80,fontFamily:"system-ui,-apple-system,sans-serif",color:T1}},
+
+    showChangeDateModal&&h(ChangeDateModal,{currentStart:planStart,onSave:changeStart,onCancel:()=>setShowChangeDateModal(false)}),
+
+    // Header
+    h("div",{style:{padding:"1rem 1rem .75rem",borderBottom:`0.5px solid ${BD}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",background:BG,position:"sticky",top:0,zIndex:20}},
+      h("div",{},
+        h("p",{style:{fontSize:11,color:T3,marginBottom:2}},`Phase ${ph} — ${phName} · Week ${Math.max(1,wk)}`),
+        h("h1",{style:{fontSize:19,fontWeight:500,color:T1}},"Fitness tracker"),
+      ),
+      h("div",{style:{textAlign:"right"}},
+        h("p",{style:{fontSize:11,color:T3}},new Date(today+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})),
+        h("p",{style:{fontSize:12,color:dp.color,marginTop:2}},dp.label+" day"),
+      )
+    ),
+
+    // Tabs
+    h("div",{style:{display:"flex",borderBottom:`0.5px solid ${BD}`,background:S1,position:"sticky",top:"52px",zIndex:10}},
+      [["today","Today"],["month","Month"],["diet","Diet"],["plan","Plan"],["suppl","Suppl"]].map(([id,lbl])=>
+        h("button",{key:id,onClick:()=>setTab(id),style:tbtn(tab===id)},lbl)
+      )
+    ),
+
+    // ══ TODAY ══════════════════════════════════════════════
+    tab==="today"&&h("div",{style:{padding:"1rem"}},
+      h("div",{style:{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:"1rem",WebkitOverflowScrolling:"touch"}},
+        wd.map(ds=>{
+          const ddi=dayIdx(planStart,ds);const ddp=PPL[ddi];
+          const hasAny=Object.values(getRec(ds)).some(Boolean);
+          const isTd=ds===today;const isSel=ds===sel;
+          const isBeforePlan=ds<planStart;
+          return h("button",{key:ds,onClick:()=>setSel(ds),style:{flex:"0 0 auto",width:48,padding:"7px 0",borderRadius:10,background:isSel?S2:S1,border:isSel?`1.5px solid ${ddp.color}`:`0.5px solid ${BD}`,cursor:"pointer",textAlign:"center",opacity:isBeforePlan?.4:1}},
+            h("p",{style:{fontSize:10,color:T3,marginBottom:2}},new Date(ds+"T12:00:00").toLocaleDateString("en-US",{weekday:"short"})),
+            h("p",{style:{fontSize:15,fontWeight:isSel?600:400,color:isTd?ddp.color:T1,marginBottom:4}},new Date(ds+"T12:00:00").getDate()),
+            h("div",{style:{width:6,height:6,borderRadius:"50%",margin:"0 auto",background:hasAny?ddp.color:BD}})
+          );
+        })
+      ),
+
+      h("div",{style:{background:dp.dim,borderRadius:16,padding:"1rem",marginBottom:"1rem",border:`0.5px solid ${dp.color}25`,display:"flex",gap:12,alignItems:"center"}},
+        h("div",{style:{flexShrink:0}},h(IllusComp,{color:dp.color,size:72})),
+        h("div",{style:{flex:1}},
+          h("p",{style:{fontSize:11,color:dp.color,marginBottom:3,opacity:.75}},`Day ${di+1} · Week ${Math.max(1,wk)} · Phase ${ph}`),
+          h("p",{style:{fontSize:20,fontWeight:500,color:dp.color}},dp.label+" day"),
+          h("p",{style:{fontSize:12,color:dp.color,opacity:.65,marginBottom:8}},phName+" phase"),
+          h("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:4}},
+            h("div",{style:{flex:1,height:6,background:"#ffffff0a",borderRadius:99,overflow:"hidden"}},h("div",{style:{height:"100%",width:`${pct}%`,background:dp.color,borderRadius:99,transition:"width .3s"}})),
+            h("p",{style:{fontSize:15,fontWeight:600,color:dp.color}},pct+"%")
+          ),
+          h("p",{style:{fontSize:11,color:dp.color,opacity:.7}},`${done}/${total} done`)
+        )
+      ),
+
+      h("p",{style:caps},"العادات اليومية"),
+      h("div",{style:card},HABITS.map((hb,i)=>h(HabitRow,{key:hb.id,hb,last:i===HABITS.length-1}))),
+
+      h("p",{style:caps},"المكملات الغذائية"),
+      h("div",{style:card},allSuplsForDisplay.map((s,i)=>h(SupplRow,{key:s.id,s,last:i===allSuplsForDisplay.length-1}))),
+
+      dp.type!=="rest"
+        ?h("div",{},h("p",{style:caps},`التمارين — ${dp.label} (Phase ${ph}: ${phName})`),h("div",{style:card},exList.map((ex,i)=>h(ExRow,{key:i,ex,i,last:i===exList.length-1}))))
+        :h("div",{},
+            h("p",{style:caps},"يوم الراحة الإيجابية"),
+            h("div",{style:card},REST_ACT.map((a,i)=>h(RestRow,{key:a.id,a,last:i===REST_ACT.length-1}))),
+            h("div",{style:{background:dp.dim,borderRadius:12,padding:"1rem",textAlign:"center",border:`0.5px solid ${dp.color}20`,marginTop:10}},
+              h("div",{style:{width:60,margin:"0 auto 8px"}},h(IllusRest,{color:dp.color,size:60})),
+              h("p",{style:{fontSize:15,fontWeight:500,color:dp.color,marginBottom:4}},"Recovery is part of the program"),
+              h("p",{style:{fontSize:13,color:dp.color,opacity:.65,lineHeight:1.5}},"العضلات بتكبر في أيام الراحة.")
+            )
+          ),
+
+      h("p",{style:caps},"تتبع المياه اليومية"),
+      h(WaterWidget)
+    ),
+
+    // ══ MONTH / RANKING ════════════════════════════════════
+    tab==="month"&&h("div",{style:{padding:"1rem"}},
+      (()=>{
+        const planStartD=new Date(planStart+"T12:00:00");
+        const todayD=new Date(today+"T12:00:00");
+        const totalPlanDays=today>=planStart?Math.floor((todayD-planStartD)/864e5)+1:0;
+        let oTotal=0,oDone=0,streak=0,best=0,tmp=0,wkDays=0,perfDays=0,actDays=0;
+        if(totalPlanDays>0){
+          const all=Array.from({length:totalPlanDays},(_,i)=>{const d=new Date(planStartD);d.setDate(d.getDate()+i);return fmt(d);});
+          all.forEach(ds=>{
+            const chks=getAllChecks(planStart,ds);
+            const r2=getRec(ds);
+            const d2=chks.filter(c=>r2[c.id]).length;
+            oTotal+=chks.length;oDone+=d2;
+            if(d2>0){actDays++;tmp++;}else{if(tmp>best)best=tmp;tmp=0;}
+            if(d2===chks.length&&chks.length>0)perfDays++;
+            if(r2["ex_0"]||r2["walk"])wkDays++;
+          });
+          if(tmp>best)best=tmp;streak=tmp;
+        }
+        const oPct=oTotal>0?Math.round((oDone/oTotal)*100):0;
+        const cRate=totalPlanDays>0?Math.round((actDays/totalPlanDays)*100):0;
+        const grade=oPct>=90?"S":oPct>=80?"A+":oPct>=70?"A":oPct>=60?"B":oPct>=40?"C":"D";
+        const gc={"S":"#facc15","A+":"#4ade80","A":"#86efac","B":"#60a5fa","C":"#fb923c","D":"#f87171"};
+        const medal=oPct>=90?"🏆":oPct>=80?"🥇":oPct>=70?"🥈":oPct>=60?"🥉":"💪";
+        const msg=oPct>=90?"Elite — top 5%":oPct>=80?"ممتاز — عادة حقيقية":oPct>=70?"كويس — ادفع شوية":oPct>=60?"أساس كويس — كمّل":oPct>=40?"كمّل — كل يوم بيفرق":"خطتك بتبدأ "+fmtDisplay(planStart);
+        return h("div",{},
+          h("div",{style:{background:"linear-gradient(135deg,#0d1e35,#0a1f12)",borderRadius:16,padding:"1.25rem",marginBottom:"1rem",border:"0.5px solid #ffffff10",textAlign:"center"}},
+            h("p",{style:{fontSize:12,color:T3,marginBottom:6,textTransform:"uppercase",letterSpacing:".05em"}},"Overall commitment score"),
+            h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:8}},
+              h("p",{style:{fontSize:52,lineHeight:1}},medal),
+              h("div",{},h("p",{style:{fontSize:56,fontWeight:700,color:gc[grade]||T1,lineHeight:1}},grade),h("p",{style:{fontSize:12,color:T3,marginTop:2}},oPct+"% من كل المهام"))
+            ),
+            h("p",{style:{fontSize:13,color:T2,marginBottom:"1rem"}},msg),
+            h("div",{style:{height:6,background:"#ffffff0a",borderRadius:99,overflow:"hidden",marginBottom:"1rem"}},h("div",{style:{height:"100%",width:oPct+"%",background:"linear-gradient(90deg,#4ade80,#60a5fa)",borderRadius:99,transition:"width .5s"}})),
+            h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}},
+              [{lbl:"أيام",val:totalPlanDays||"—",color:T2},{lbl:"نشط",val:actDays||"—",color:"#60a5fa"},{lbl:"مثالي",val:perfDays||"—",color:"#4ade80"},{lbl:"🔥",val:streak>0?streak+"d":"0d",color:"#fb923c"}]
+              .map(({lbl,val,color})=>h("div",{key:lbl,style:{background:"#ffffff05",borderRadius:8,padding:"8px 4px",textAlign:"center"}},h("p",{style:{fontSize:18,fontWeight:600,color}},val),h("p",{style:{fontSize:9,color:T3,marginTop:2}},lbl)))
+            )
+          ),
+          h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:"1rem"}},
+            [{lbl:"أفضل سلسلة",val:best>0?best+" days":"—",sub:"أيام متتالية",color:"#fb923c",dim:"#1e0e00"},{lbl:"معدل الالتزام",val:cRate>0?cRate+"%":"—",sub:"أيام فيها نشاط",color:"#60a5fa",dim:"#0d1e35"},{lbl:"جلسات تمرين",val:wkDays>0?wkDays:"—",sub:"أيام تمرين",color:"#4ade80",dim:"#0a1f12"},{lbl:"أيام مثالية",val:perfDays>0?perfDays:"—",sub:"100% checklist",color:"#facc15",dim:"#1a1200"}]
+            .map(({lbl,val,sub,color,dim})=>h("div",{key:lbl,style:{background:dim,borderRadius:12,padding:"10px 12px",border:`0.5px solid ${color}20`}},h("p",{style:{fontSize:10,color:T3,marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}},lbl),h("p",{style:{fontSize:24,fontWeight:600,color}},val),h("p",{style:{fontSize:10,color:T3,marginTop:2}},sub)))
+          ),
+          h("div",{style:{background:S1,borderRadius:12,padding:"12px 14px",marginBottom:"1rem",border:`0.5px solid ${BD}`}},
+            h("p",{style:{fontSize:11,color:T3,marginBottom:10,textTransform:"uppercase",letterSpacing:".05em",fontWeight:600}},"مقياس التقييم"),
+            [["S","≥ 90%","#facc15","Elite"],["A+","≥ 80%","#4ade80","ممتاز"],["A","≥ 70%","#86efac","كويس"],["B","≥ 60%","#60a5fa","ماشي"],["C","≥ 40%","#fb923c","محتاج تركيز"],["D","< 40%","#f87171","ابدأ من الأول"]]
+            .map(([g,range,color,msg2],i,arr)=>h("div",{key:g,style:{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:i<arr.length-1?`0.5px solid ${BD}`:"none"}},
+              h("div",{style:{width:28,height:28,borderRadius:8,background:color+"20",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},h("p",{style:{fontSize:14,fontWeight:700,color}},g)),
+              h("div",{style:{flex:1}},h("p",{style:{fontSize:13,color:T1}},msg2),h("p",{style:{fontSize:10,color:T3,marginTop:1}},range+" من المهام")),
+              grade===g&&h("span",{style:{fontSize:10,color,background:color+"20",padding:"2px 8px",borderRadius:99,flexShrink:0}},"← أنت")
+            ))
+          ),
+          // Plan start info + change button
+          h("div",{style:{background:S1,borderRadius:12,padding:"12px 14px",marginBottom:"1rem",border:`0.5px solid ${BD}`,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+            h("div",{},
+              h("p",{style:{fontSize:11,color:T3,marginBottom:3}},"بداية الخطة"),
+              h("p",{style:{fontSize:14,fontWeight:500,color:"#60a5fa"}},fmtDisplay(planStart))
+            ),
+            h("button",{
+              onClick:()=>setShowChangeDateModal(true),
+              style:{padding:"7px 12px",borderRadius:8,border:`0.5px solid ${BD}`,background:S2,color:T2,fontSize:12,cursor:"pointer"}
+            },"تغيير")
+          )
+        );
+      })(),
+
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}},
+        h("button",{onClick:()=>{if(calM===0){setCalM(11);setCalY(y=>y-1);}else setCalM(m=>m-1);},style:{background:S1,border:`0.5px solid ${BD}`,color:T1,borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:16}},"‹"),
+        h("p",{style:{fontSize:15,fontWeight:500,color:T1}},MN[calM]+" "+calY),
+        h("button",{onClick:()=>{if(calM===11){setCalM(0);setCalY(y=>y+1);}else setCalM(m=>m+1);},style:{background:S1,border:`0.5px solid ${BD}`,color:T1,borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:16}},"›")
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:"1rem"}},
+        [{lbl:"التقييم",val:ms.grade,color:gradeColor[ms.grade]||T1},{lbl:"متوسط",val:ms.avg+"%",color:"#60a5fa"},{lbl:"مثالي",val:ms.perfect+"d",color:"#4ade80"},{lbl:"نشط",val:ms.active+"d",color:"#fb923c"}]
+        .map(({lbl,val,color})=>h("div",{key:lbl,style:{background:S1,borderRadius:10,padding:"8px 6px",textAlign:"center"}},h("p",{style:{fontSize:10,color:T3,marginBottom:3,textTransform:"uppercase",letterSpacing:".04em"}},lbl),h("p",{style:{fontSize:20,fontWeight:600,color}},val)))
+      ),
+      h("div",{style:{background:S1,borderRadius:14,padding:"1rem",border:`0.5px solid ${BD}`}},
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:8}},["Su","Mo","Tu","We","Th","Fr","Sa"].map(d=>h("p",{key:d,style:{fontSize:10,color:T3,textAlign:"center",fontWeight:600}},d))),
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}},
+          [...Array(firstDow).fill(null).map((_,i)=>h("div",{key:"e"+i})),
+           ...cDays.map(ds=>{
+             const{pct:p}=completion(ds);
+             const isFuture=ds>today,isTd=ds===today,isB=ds<planStart;
+             const hasAny=Object.values(getRec(ds)).some(Boolean);
+             const ddi=dayIdx(planStart,ds),ddp=PPL[ddi];
+             let bg2=S2;
+             if(!isFuture&&!isB&&hasAny)bg2=p>=80?"#0a1f0a":p>=50?"#1e0e00":"#0d1e35";
+             return h("div",{key:ds,onClick:()=>{setSel(ds);setTab("today");},style:{aspectRatio:"1",borderRadius:8,background:bg2,border:isTd?`1.5px solid ${ddp.color}`:`0.5px solid ${BD}`,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",opacity:(isFuture||isB)?.4:1}},
+               h("p",{style:{fontSize:12,color:(isFuture||isB)?"#444":T1,fontWeight:isTd?600:400}},new Date(ds+"T12:00:00").getDate()),
+               !isFuture&&!isB&&hasAny&&h("p",{style:{fontSize:7,color:ddp.color,marginTop:1}},p+"%")
+             );
+           })]
+        ),
+        h("div",{style:{display:"flex",gap:10,marginTop:12,justifyContent:"center",flexWrap:"wrap"}},
+          [["#0a1f0a","80–100%"],["#1e0e00","50–79%"],["#0d1e35","1–49%"]].map(([bg2,lbl])=>h("div",{key:lbl,style:{display:"flex",alignItems:"center",gap:4}},h("div",{style:{width:10,height:10,borderRadius:3,background:bg2,border:`0.5px solid ${BD}`}}),h("p",{style:{fontSize:10,color:T3}},lbl)))
+        )
+      ),
+      ms.total>0&&h("div",{style:{background:"#091509",border:"0.5px solid #4ade8025",borderRadius:12,padding:"1rem",marginTop:10}},
+        h("p",{style:{fontSize:13,fontWeight:500,color:"#4ade80",marginBottom:4}},"ملخص "+MN[calM]),
+        h("p",{style:{fontSize:13,color:T2,lineHeight:1.6}},ms.perfect+" يوم مثالي، "+ms.active+" يوم نشط. متوسط "+ms.avg+"% — تقييم "+ms.grade+". "+(ms.avg>=80?"استمر، الثبات هو المفتاح.":ms.avg>=60?"مجهود كويس — ادفع للـ 80%.":"كل يوم بيفرق."))
+      )
+    ),
+
+    // ══ DIET ═══════════════════════════════════════════════
+    tab==="diet"&&h("div",{style:{padding:"1rem"}},
+      h("div",{style:{background:"#0a1525",border:"0.5px solid #60a5fa20",borderRadius:12,padding:"10px 14px",marginBottom:"1rem"}},
+        h("p",{style:{fontSize:12,color:"#60a5fa",marginBottom:3,fontWeight:600}},"إجمالي السعرات: ~1,340 kcal · عجز ~500 kcal"),
+        h("p",{style:{fontSize:11,color:T3}},"بروتين: ~99g · كربو: ~128g · دهون: ~36g")
+      ),
+      DIET.map(meal=>h("div",{key:meal.title,style:{...card,marginBottom:16}},
+        h("div",{style:{padding:"12px 14px",borderBottom:`0.5px solid ${BD}`,background:S2}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}},
+            h("div",{},h("p",{style:{fontSize:15,fontWeight:600,color:T1}},meal.title),h("p",{style:{fontSize:12,color:"#60a5fa",marginTop:2}},meal.titleEn+" · "+meal.time)),
+            h("span",{style:{fontSize:12,color:"#fb923c",background:"#1e0e00",padding:"4px 10px",borderRadius:99,flexShrink:0,fontWeight:600}},meal.totalKcal+" kcal")
+          ),
+          h("div",{style:{display:"flex",gap:12}},
+            [{lbl:"بروتين",val:meal.macros.p+"g",color:"#60a5fa"},{lbl:"كربو",val:meal.macros.c+"g",color:"#fb923c"},{lbl:"دهون",val:meal.macros.f+"g",color:"#c084fc"}]
+            .map(({lbl,val,color})=>h("div",{key:lbl,style:{background:color+"15",borderRadius:6,padding:"3px 8px",display:"flex",gap:4,alignItems:"center"}},h("p",{style:{fontSize:11,color:T3}},lbl),h("p",{style:{fontSize:11,color,fontWeight:600}},val)))
+          )
+        ),
+        ...meal.items.map((item,i)=>h("div",{key:i,style:{padding:"10px 14px",borderBottom:i<meal.items.length-1?`0.5px solid ${BD}`:"none"}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:3}},h("p",{style:{fontSize:14,color:T1,flex:1,marginRight:8}},item.name),h("span",{style:{fontSize:11,color:"#fb923c",flexShrink:0,background:"#1e0e0070",padding:"1px 6px",borderRadius:4}},item.kcal+" kcal")),
+          h("div",{style:{display:"flex",gap:8,marginBottom:4}},
+            [{lbl:"P",val:item.p,color:"#60a5fa"},{lbl:"C",val:item.c,color:"#fb923c"},{lbl:"F",val:item.f,color:"#c084fc"}]
+            .map(({lbl,val,color})=>h("span",{key:lbl,style:{fontSize:10,color:T3}},h("span",{style:{color,fontWeight:600}},lbl+":"+val+"g")," "))
+          ),
+          h("p",{style:{fontSize:11,color:T3,lineHeight:1.4,marginBottom:3}},item.note),
+          h("p",{style:{fontSize:11,color:"#4ade80",lineHeight:1.4}},item.alt)
+        ))
+      )),
+      h("p",{style:{fontSize:11,fontWeight:600,color:T3,textTransform:"uppercase",letterSpacing:".07em",marginBottom:8,marginTop:"1.25rem"}},"تجنّب → بديل مصري"),
+      h("div",{style:card},SWAPS.map(([avoid,swap],i)=>h("div",{key:i,style:{padding:"10px 14px",borderBottom:i<SWAPS.length-1?`0.5px solid ${BD}`:"none"}},h("p",{style:{fontSize:12,color:"#f87171",textDecoration:"line-through",marginBottom:3}},"✗  "+avoid),h("p",{style:{fontSize:13,color:"#4ade80"}},"→  "+swap))))
+    ),
+
+    // ══ PLAN ═══════════════════════════════════════════════
+    tab==="plan"&&h("div",{style:{padding:"1rem"}},
+      h("div",{style:{background:"#0d1e35",borderRadius:12,padding:"12px 14px",marginBottom:"1rem",border:"0.5px solid #60a5fa25"}},
+        h("p",{style:{fontSize:11,color:T3,marginBottom:4}},"بداية الخطة"),
+        h("p",{style:{fontSize:14,fontWeight:500,color:"#60a5fa"}},fmtDisplay(planStart)),
+        h("p",{style:{fontSize:12,color:T3,marginTop:2}},fmtDisplayEn(planStart)+" — Day 1: Push")
+      ),
+      h("p",{style:{fontSize:11,fontWeight:600,color:T3,textTransform:"uppercase",letterSpacing:".07em",marginBottom:8}},"مراحل البرنامج — 12 أسبوع"),
+      [[1,"Foundation","Weeks 1–4","#60a5fa","#0d1e35","3–4 sets · 10–12 reps · تعلّم الحركات، ثبّت الفورم، ابني العادة."],
+       [2,"Hypertrophy","Weeks 5–8","#fb923c","#1e0e00","4 sets · 8–12 reps + drop sets. حجم أعلى لأقصى ضخامة."],
+       [3,"Strength","Weeks 9–12","#c084fc","#1a0a2e","5×5 compounds + accessories. قوة حقيقية كأساس للدورة الجاية."],
+      ].map(([p2,name,wks,color,dim,desc])=>h("div",{key:p2,style:{background:dim,border:`0.5px solid ${color}25`,borderRadius:12,padding:"12px 14px",marginBottom:10}},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}},
+          h("div",{},h("p",{style:{fontSize:13,fontWeight:500,color}},`Phase ${p2} — ${name}`),h("p",{style:{fontSize:11,color:color,opacity:.6,marginTop:2}},wks)),
+          p2===ph&&h("span",{style:{fontSize:11,color,background:color+"20",padding:"2px 8px",borderRadius:99}},"← current")
+        ),
+        h("p",{style:{fontSize:13,color:T2,lineHeight:1.5}},desc)
+      )),
+      h("p",{style:{fontSize:11,fontWeight:600,color:T3,textTransform:"uppercase",letterSpacing:".07em",marginBottom:8,marginTop:"1.25rem"}},"PPL cycle — Phase "+ph+": "+phName),
+      PPL.map((dp2,i)=>{
+        const exArr=dp2.type!=="rest"?(EX[dp2.type]?.[ph]||[]):[];
+        const Ic=ILLUS_MAP[dp2.type]||IllusRest;
+        return h("div",{key:i,style:{...card,marginBottom:10}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:exArr.length?`0.5px solid ${BD}`:"none",background:dp2.dim}},
+            h("div",{style:{flexShrink:0}},h(Ic,{color:dp2.color,size:32})),
+            h("p",{style:{fontSize:14,fontWeight:500,color:dp2.color}},`Day ${i+1} — ${dp2.label}`),
+            h("span",{style:{marginLeft:"auto",fontSize:11,color:dp2.color,background:dp2.color+"20",padding:"2px 8px",borderRadius:99}},dp2.type)
+          ),
+          exArr.length>0?exArr.map((ex,ei)=>h("p",{key:ei,style:{fontSize:13,color:T2,padding:"7px 14px",borderBottom:ei<exArr.length-1?`0.5px solid ${BD}`:"none"}},ex)):h("p",{style:{fontSize:13,color:T3,padding:"10px 14px"}},"مشي · إطالة · foam roll · راحة")
+        );
+      })
+    ),
+
+    // ══ SUPPLEMENTS ════════════════════════════════════════
+    tab==="suppl"&&h("div",{style:{padding:"1rem"}},
+      SUPPL_DATA.map(s=>h("div",{key:s.name,style:{background:S1,border:`0.5px solid ${BD}`,borderRadius:14,padding:"1rem",marginBottom:12}},
+        h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:10}},
+          h("div",{style:{width:44,height:44,borderRadius:12,background:s.dim||"#111",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},h("div",{style:{width:22,height:22,borderRadius:"50%",background:s.color,opacity:.85}})),
+          h("div",{},h("p",{style:{fontSize:15,fontWeight:500,color:T1}},s.name),h("p",{style:{fontSize:12,color:s.color}},s.dose))
+        ),
+        h("div",{style:{display:"flex",gap:8,marginBottom:8,alignItems:"flex-start"}},h("p",{style:{fontSize:12,color:T3,flexShrink:0}},"⏱"),h("p",{style:{fontSize:13,color:T2}},s.timing)),
+        h("div",{style:{background:s.dim||"#111",borderRadius:10,padding:"10px 12px",border:`0.5px solid ${s.color}15`}},h("p",{style:{fontSize:13,color:T2,lineHeight:1.6}},s.why))
+      )),
+      h("div",{style:{background:"#1a0e00",border:"0.5px solid #fb923c25",borderRadius:12,padding:"1rem"}},h("p",{style:{fontSize:13,color:T2,lineHeight:1.6}},"⚠  المكملات تدعم خطتك لكنها مش بديل عن الأساسيات. استشر دكتورك قبل بدء الكروميوم أو L-Carnitine."))
+    )
+  );
+}
+
+createRoot(document.getElementById("root")).render(h(App));
+</script>
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{});});}
+</script>
+</body>
+</html>
